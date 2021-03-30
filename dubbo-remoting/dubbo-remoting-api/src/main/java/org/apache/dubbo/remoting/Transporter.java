@@ -33,7 +33,7 @@ public interface Transporter {
 
     /**
      * Bind a server.
-     *
+     * 会根据参数，找到并调用真正的执行类
      * @param url     server url
      * @param handler
      * @return server

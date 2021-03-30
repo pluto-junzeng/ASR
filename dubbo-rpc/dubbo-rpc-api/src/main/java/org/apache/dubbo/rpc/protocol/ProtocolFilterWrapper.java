@@ -35,11 +35,17 @@ import static org.apache.dubbo.common.constants.CommonConstants.SERVICE_FILTER_K
 
 /**
  * ListenerProtocol
+ * 扩展了 DubboProtocol类， 一些通用的判断逻
+ * 辑全部放在了 ProtocolFilterWrapper 类的 export方法中
  */
 @Activate(order = 100)
 public class ProtocolFilterWrapper implements Protocol {
 
     private final Protocol protocol;
+
+    // 实现了Protocol接口，但是构造函数中又传入了一个protocol类型的参数，框架会自动注入
+    // 因此ProtocolFilterWrapper会被认定为Wrapper类。 这是一种装饰器
+    // 模式， 把通用的抽象逻辑进行封装或对子类进行增强， 让子类可以更加专注具体的实现。
 
     public ProtocolFilterWrapper(Protocol protocol) {
         if (protocol == null) {
@@ -72,6 +78,7 @@ public class ProtocolFilterWrapper implements Protocol {
         if (UrlUtils.isRegistry(invoker.getUrl())) {
             return protocol.export(invoker);
         }
+        // 在被代理类前面插入自己的逻辑进行增强，最终调用被代理类。
         return protocol.export(buildInvokerChain(invoker, SERVICE_FILTER_KEY, CommonConstants.PROVIDER));
     }
 

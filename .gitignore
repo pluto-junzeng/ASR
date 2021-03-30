@@ -44,3 +44,7 @@ compiler/.gradle/*
 
 # protobuf
 dubbo-serialization/dubbo-serialization-protobuf/build/*
+
+
+# 工厂路径的忽略
+.factorypath
