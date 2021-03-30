@@ -669,6 +669,11 @@ public class ExtensionLoader<T> {
         return getExtensionClasses().containsKey(name);
     }
 
+    /**
+     * 总体实现了类似Spring的IoC机制
+     * @param instance
+     * @return
+     */
     private T injectExtension(T instance) {
 
         if (objectFactory == null) {
@@ -678,7 +683,7 @@ public class ExtensionLoader<T> {
         try {
             for (Method method : instance.getClass().getMethods()) {
                 if (!isSetter(method)) {
-                    continue;
+                    continue; // 只考虑 setter 方法
                 }
                 /**
                  * Check {@link DisableInject} to see if we need auto injection for this property
@@ -693,9 +698,9 @@ public class ExtensionLoader<T> {
 
                 try {
                     String property = getSetterProperty(method);
-                    Object object = objectFactory.getExtension(pt, property);
+                    Object object = objectFactory.getExtension(pt, property); // 通过 ExtensionFactory 获取实例
                     if (object != null) {
-                        method.invoke(instance, object);
+                        method.invoke(instance, object); // 如果获取了这个扩展类实现， 则调用set方法， 把实例注入进去
                     }
                 } catch (Exception e) {
                     logger.error("Failed to inject via method " + method.getName()
@@ -833,6 +838,7 @@ public class ExtensionLoader<T> {
                 while (urls.hasMoreElements()) {
                     java.net.URL resourceURL = urls.nextElement();
                     loadResource(extensionClasses, classLoader, resourceURL, overridden, excludedPackages);
+                    // 循环遍历urls,解析字符串， 得到扩展实现类， 并加入缓存
                 }
             }
         } catch (Throwable t) {
@@ -898,9 +904,9 @@ public class ExtensionLoader<T> {
                     + clazz.getName() + " is not subtype of interface.");
         }
         if (clazz.isAnnotationPresent(Adaptive.class)) {
-            cacheAdaptiveClass(clazz, overridden);
+            cacheAdaptiveClass(clazz, overridden); // 如果是自适应扩展类(Adaptive),则直接加入自适应扩展类的Set集合
         } else if (isWrapperClass(clazz)) {
-            cacheWrapperClass(clazz);
+            cacheWrapperClass(clazz); // 如果是包装扩展类(Wrapper),则直接加入包装扩展类的Set集合
         } else {
             clazz.getConstructor();
             if (StringUtils.isEmpty(name)) {

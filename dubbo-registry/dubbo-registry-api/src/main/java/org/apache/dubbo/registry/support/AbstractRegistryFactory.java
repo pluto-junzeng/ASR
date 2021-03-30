@@ -170,7 +170,7 @@ public abstract class AbstractRegistryFactory implements RegistryFactory {
         return url.toServiceStringWithoutResolving();
     }
 
-    protected abstract Registry createRegistry(URL url);
+    protected abstract Registry createRegistry(URL url); // 抽象模板方法，该方法由子类具体实现
 
 
     private static Registry DEFAULT_NOP_REGISTRY = new Registry() {
