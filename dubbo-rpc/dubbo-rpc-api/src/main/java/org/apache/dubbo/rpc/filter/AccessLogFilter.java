@@ -52,6 +52,8 @@ import static org.apache.dubbo.rpc.Constants.ACCESS_LOG_KEY;
  * Logger key is <code><b>dubbo.accesslog</b></code>.
  * In order to configure access log appear in the specified appender only, additivity need to be configured in log4j's
  * config file, for example:
+ * 打印每一次请求的访问日志。如果需要访问的日志只出现在指定的appender中，则可以在
+ * log4j's 的配置文件中配置additivity
  * <code>
  * <pre>
  * &lt;logger name="<b>dubbo.accesslog</b>" <font color="red">additivity="false"</font>&gt;
@@ -90,7 +92,9 @@ public class AccessLogFilter implements Filter {
 
     /**
      * This method logs the access log for service method invocation call.
-     *
+     * （1） 获取参数。获取上下文、接口名、版本、分组信息等参数，用于日志的构建。
+     * （2） 构建日志字符串。根据步骤（1）中的数据开始组装日志，最终会得到一个日志字符串
+     * （3） 打印日志
      * @param invoker service
      * @param inv     Invocation service method.
      * @return Result from service method.
@@ -144,6 +148,8 @@ public class AccessLogFilter implements Filter {
     }
 
     private void writeLogToFile() {
+        // 因为 set 是无序的，所以打印出来的也有可能是无序的
+        // TODO 这里 为什么不使用有序的呢？或者栈
         if (!LOG_ENTRIES.isEmpty()) {
             for (Map.Entry<String, Set<AccessLogData>> entry : LOG_ENTRIES.entrySet()) {
                 String accessLog = entry.getKey();
