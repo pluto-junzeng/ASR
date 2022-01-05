@@ -18,6 +18,8 @@ package org.apache.dubbo.common.config.configcenter.wrapper;
 
 import org.apache.dubbo.common.config.configcenter.ConfigurationListener;
 import org.apache.dubbo.common.config.configcenter.DynamicConfiguration;
+import org.apache.dubbo.common.logger.Logger;
+import org.apache.dubbo.common.logger.LoggerFactory;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -32,6 +34,8 @@ public class CompositeDynamicConfiguration implements DynamicConfiguration {
 
     public static final String NAME = "COMPOSITE";
 
+    private static final Logger logger = LoggerFactory.getLogger(CompositeDynamicConfiguration.class);
+
     private Set<DynamicConfiguration> configurations = new HashSet<>();
 
     public void addConfiguration(DynamicConfiguration configuration) {
@@ -39,6 +43,11 @@ public class CompositeDynamicConfiguration implements DynamicConfiguration {
             this.configurations.add(configuration);
         }
     }
+
+    public Set<DynamicConfiguration> getInnerConfigurations() {
+        return configurations;
+    }
+
 
     @Override
     public void addListener(String key, String group, ConfigurationListener listener) {
@@ -80,6 +89,18 @@ public class CompositeDynamicConfiguration implements DynamicConfiguration {
     @SuppressWarnings("unchecked")
     public SortedSet<String> getConfigKeys(String group) throws UnsupportedOperationException {
         return (SortedSet<String>) iterateConfigOperation(configuration -> configuration.getConfigKeys(group));
+    }
+
+    @Override
+    public void close() throws Exception {
+        for (DynamicConfiguration configuration : configurations) {
+            try {
+                configuration.close();
+            } catch (Exception e) {
+                logger.warn("close dynamic configuration " + configuration.getClass().getName() + "failed: " + e.getMessage(), e);
+            }
+        }
+        configurations.clear();
     }
 
     private void iterateListenerOperation(Consumer<DynamicConfiguration> consumer) {

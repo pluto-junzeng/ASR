@@ -19,42 +19,49 @@ package org.apache.dubbo.config.spring.registry;
 import org.apache.dubbo.common.URL;
 import org.apache.dubbo.registry.client.AbstractServiceDiscovery;
 import org.apache.dubbo.registry.client.ServiceInstance;
+import org.apache.dubbo.rpc.model.ApplicationModel;
 
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public class MockServiceDiscovery extends AbstractServiceDiscovery {
-
     private URL registryURL;
 
-    @Override
-    public void initialize(URL registryURL) throws Exception {
-        this.registryURL = registryURL;
+    public MockServiceDiscovery(ApplicationModel applicationModel, URL registryURL) {
+        super(applicationModel, registryURL);
+    }
+
+    public MockServiceDiscovery(String serviceName, URL registryURL) {
+        super(serviceName, registryURL);
     }
 
     @Override
-    public void destroy() throws Exception {
-
-    }
-
-    @Override
-    public void doRegister(ServiceInstance serviceInstance) {
-
-    }
-
-    @Override
-    public void doUpdate(ServiceInstance serviceInstance) {
+    public void doDestroy() throws Exception {
 
     }
 
     @Override
-    public void unregister(ServiceInstance serviceInstance) throws RuntimeException {
-        this.serviceInstance = null;
+    public void doRegister(ServiceInstance serviceInstance) throws RuntimeException {
+    }
+
+    @Override
+    public void doUpdate(ServiceInstance serviceInstance) throws RuntimeException {
+    }
+
+    @Override
+    public void doUnregister(ServiceInstance serviceInstance) throws RuntimeException {
     }
 
     @Override
     public Set<String> getServices() {
         return new HashSet<>();
+    }
+
+    @Override
+    public List<ServiceInstance> getInstances(String serviceName) throws NullPointerException {
+        return Collections.emptyList();
     }
 
     @Override

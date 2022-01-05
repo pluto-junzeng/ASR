@@ -17,7 +17,8 @@
 package org.apache.dubbo.spring.boot.autoconfigure;
 
 import org.apache.dubbo.config.spring.beans.factory.annotation.ReferenceAnnotationBeanPostProcessor;
-import org.apache.dubbo.config.spring.beans.factory.annotation.ServiceClassPostProcessor;
+import org.apache.dubbo.config.spring.beans.factory.annotation.ServiceAnnotationPostProcessor;
+import org.apache.dubbo.config.spring.util.DubboBeanUtils;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -26,6 +27,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.test.context.junit4.SpringRunner;
 
@@ -44,16 +46,17 @@ import org.springframework.test.context.junit4.SpringRunner;
 public class CompatibleDubboAutoConfigurationTest {
 
     @Autowired
-    private ObjectProvider<ServiceClassPostProcessor> serviceClassPostProcessor;
+    private ObjectProvider<ServiceAnnotationPostProcessor> serviceAnnotationPostProcessor;
 
     @Autowired
-    private ObjectProvider<ReferenceAnnotationBeanPostProcessor> referenceAnnotationBeanPostProcessor;
+    private ApplicationContext applicationContext;
 
     @Test
     public void testBeans() {
-        Assert.assertNotNull(serviceClassPostProcessor);
-        Assert.assertNotNull(serviceClassPostProcessor.getIfAvailable());
+        Assert.assertNotNull(serviceAnnotationPostProcessor);
+        Assert.assertNotNull(serviceAnnotationPostProcessor.getIfAvailable());
+
+        ReferenceAnnotationBeanPostProcessor referenceAnnotationBeanPostProcessor =  DubboBeanUtils.getReferenceAnnotationBeanPostProcessor(applicationContext);
         Assert.assertNotNull(referenceAnnotationBeanPostProcessor);
-        Assert.assertNotNull(referenceAnnotationBeanPostProcessor.getIfAvailable());
     }
 }

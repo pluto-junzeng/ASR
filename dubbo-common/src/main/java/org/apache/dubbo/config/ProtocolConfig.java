@@ -18,12 +18,12 @@ package org.apache.dubbo.config;
 
 import org.apache.dubbo.common.utils.StringUtils;
 import org.apache.dubbo.config.support.Parameter;
+import org.apache.dubbo.rpc.model.ApplicationModel;
 
 import java.util.Map;
 
-import static org.apache.dubbo.common.constants.CommonConstants.DUBBO_VERSION_KEY;
+import static org.apache.dubbo.common.constants.CommonConstants.DUBBO_PROTOCOL;
 import static org.apache.dubbo.common.constants.CommonConstants.SSL_ENABLED_KEY;
-import static org.apache.dubbo.config.Constants.PROTOCOLS_SUFFIX;
 
 /**
  * ProtocolConfig
@@ -198,17 +198,21 @@ public class ProtocolConfig extends AbstractConfig {
      */
     private Map<String, String> parameters;
 
-    /**
-     * If it's default
-     */
-    private Boolean isDefault;
-
     private Boolean sslEnabled;
 
     public ProtocolConfig() {
     }
 
+    public ProtocolConfig(ApplicationModel applicationModel) {
+        super(applicationModel);
+    }
+
     public ProtocolConfig(String name) {
+        setName(name);
+    }
+
+    public ProtocolConfig(ApplicationModel applicationModel, String name) {
+        super(applicationModel);
         setName(name);
     }
 
@@ -217,6 +221,35 @@ public class ProtocolConfig extends AbstractConfig {
         setPort(port);
     }
 
+    public ProtocolConfig(ApplicationModel applicationModel, String name, int port) {
+        super(applicationModel);
+        setName(name);
+        setPort(port);
+    }
+
+    @Override
+    protected void checkDefault() {
+        super.checkDefault();
+        if (name == null) {
+            name = DUBBO_PROTOCOL;
+        }
+    }
+
+//    @Override
+//    public List<String> getPrefixes() {
+//        List<String> prefixes = new ArrayList<>();
+//        if (StringUtils.hasText(this.getId())) {
+//            // dubbo.protocols.{protocol-id}
+//            prefixes.add(CommonConstants.DUBBO + "." + getPluralTagName(this.getClass()) + "." + this.getId());
+//        } else if (StringUtils.hasText(this.getName()) && !StringUtils.isEquals(this.getId(), this.getName())) {
+//            // dubbo.protocols.{protocol-name}
+//            prefixes.add(CommonConstants.DUBBO + "." + getPluralTagName(this.getClass()) + "." + this.getName());
+//        }
+//        // dubbo.protocol
+//        prefixes.add(getTypePrefix());
+//        return prefixes;
+//    }
+
     @Parameter(excluded = true)
     public String getName() {
         return name;
@@ -224,7 +257,6 @@ public class ProtocolConfig extends AbstractConfig {
 
     public final void setName(String name) {
         this.name = name;
-        this.updateIdIfAbsent(name);
     }
 
     @Parameter(excluded = true)
@@ -246,7 +278,7 @@ public class ProtocolConfig extends AbstractConfig {
     }
 
     @Deprecated
-    @Parameter(excluded = true)
+    @Parameter(excluded = true, attribute = false)
     public String getPath() {
         return getContextpath();
     }
@@ -456,7 +488,7 @@ public class ProtocolConfig extends AbstractConfig {
      * @deprecated {@link #getDispatcher()}
      */
     @Deprecated
-    @Parameter(excluded = true)
+    @Parameter(excluded = true, attribute = false)
     public String getDispather() {
         return getDispatcher();
     }
@@ -495,14 +527,6 @@ public class ProtocolConfig extends AbstractConfig {
         this.parameters = parameters;
     }
 
-    public Boolean isDefault() {
-        return isDefault;
-    }
-
-    public void setDefault(Boolean isDefault) {
-        this.isDefault = isDefault;
-    }
-
     @Parameter(key = SSL_ENABLED_KEY)
     public Boolean getSslEnabled() {
         return sslEnabled;
@@ -537,62 +561,9 @@ public class ProtocolConfig extends AbstractConfig {
     }
 
     @Override
-    public void refresh() {
-        if (StringUtils.isEmpty(this.getName())) {
-            this.setName(DUBBO_VERSION_KEY);
-        }
-        super.refresh();
-        if (StringUtils.isNotEmpty(this.getId())) {
-            this.setPrefix(PROTOCOLS_SUFFIX);
-            super.refresh();
-        }
-    }
-
-    @Override
-    @Parameter(excluded = true)
+    @Parameter(excluded = true, attribute = false)
     public boolean isValid() {
         return StringUtils.isNotEmpty(name);
     }
 
-    @Override
-    public String toString() {
-        final StringBuilder sb = new StringBuilder("ProtocolConfig{");
-        sb.append("name='").append(name).append('\'');
-        sb.append(", host='").append(host).append('\'');
-        sb.append(", port=").append(port);
-        sb.append(", contextpath='").append(contextpath).append('\'');
-        sb.append(", threadpool='").append(threadpool).append('\'');
-        sb.append(", threadname='").append(threadname).append('\'');
-        sb.append(", corethreads=").append(corethreads);
-        sb.append(", threads=").append(threads);
-        sb.append(", iothreads=").append(iothreads);
-        sb.append(", alive=").append(alive);
-        sb.append(", queues=").append(queues);
-        sb.append(", accepts=").append(accepts);
-        sb.append(", codec='").append(codec).append('\'');
-        sb.append(", serialization='").append(serialization).append('\'');
-        sb.append(", charset='").append(charset).append('\'');
-        sb.append(", payload=").append(payload);
-        sb.append(", buffer=").append(buffer);
-        sb.append(", heartbeat=").append(heartbeat);
-        sb.append(", accesslog='").append(accesslog).append('\'');
-        sb.append(", transporter='").append(transporter).append('\'');
-        sb.append(", exchanger='").append(exchanger).append('\'');
-        sb.append(", dispatcher='").append(dispatcher).append('\'');
-        sb.append(", networker='").append(networker).append('\'');
-        sb.append(", server='").append(server).append('\'');
-        sb.append(", client='").append(client).append('\'');
-        sb.append(", telnet='").append(telnet).append('\'');
-        sb.append(", prompt='").append(prompt).append('\'');
-        sb.append(", status='").append(status).append('\'');
-        sb.append(", register=").append(register);
-        sb.append(", keepAlive=").append(keepAlive);
-        sb.append(", optimizer='").append(optimizer).append('\'');
-        sb.append(", extension='").append(extension).append('\'');
-        sb.append(", parameters=").append(parameters);
-        sb.append(", isDefault=").append(isDefault);
-        sb.append(", sslEnabled=").append(sslEnabled);
-        sb.append('}');
-        return sb.toString();
-    }
 }

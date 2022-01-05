@@ -19,11 +19,16 @@ package org.apache.dubbo.common.bytecode;
 import org.apache.dubbo.common.utils.ClassUtils;
 import org.apache.dubbo.common.utils.ReflectUtils;
 
+import javassist.ClassPool;
+import javassist.CtMethod;
+import javassist.LoaderClassPath;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,6 +36,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
+import java.util.stream.Collectors;
 
 /**
  * Wrapper.
@@ -141,19 +147,42 @@ public abstract class Wrapper {
         for (Field f : c.getFields()) {
             String fn = f.getName();
             Class<?> ft = f.getType();
-            if (Modifier.isStatic(f.getModifiers()) || Modifier.isTransient(f.getModifiers())) {
+            if (Modifier.isStatic(f.getModifiers()) || Modifier.isTransient(f.getModifiers()) || Modifier.isFinal(f.getModifiers())) {
                 continue;
             }
 
-            c1.append(" if( $2.equals(\"").append(fn).append("\") ){ w.").append(fn).append("=").append(arg(ft, "$3")).append("; return; }");
-            c2.append(" if( $2.equals(\"").append(fn).append("\") ){ return ($w)w.").append(fn).append("; }");
+            c1.append(" if( $2.equals(\"").append(fn).append("\") ){ ((").append(f.getDeclaringClass().getName()).append(")w).").append(fn).append('=').append(arg(ft, "$3")).append("; return; }");
+            c2.append(" if( $2.equals(\"").append(fn).append("\") ){ return ($w)((").append(f.getDeclaringClass().getName()).append(")w).").append(fn).append("; }");
             pts.put(fn, ft);
         }
 
-        Method[] methods = c.getMethods();
+        final ClassPool classPool = new ClassPool(ClassPool.getDefault());
+        classPool.insertClassPath(new LoaderClassPath(cl));
+        classPool.insertClassPath(new DubboLoaderClassPath());
+
+        List<String> allMethod = new ArrayList<>();
+        try {
+            final CtMethod[] ctMethods = classPool.get(c.getName()).getMethods();
+            for (CtMethod method : ctMethods) {
+                allMethod.add(ReflectUtils.getDesc(method));
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        Method[] methods = Arrays.stream(c.getMethods())
+                                 .filter(method -> allMethod.contains(ReflectUtils.getDesc(method)))
+                                 .collect(Collectors.toList())
+                                 .toArray(new Method[] {});
         // get all public method.
-        boolean hasMethod = hasMethods(methods);
+        boolean hasMethod = ClassUtils.hasMethods(methods);
         if (hasMethod) {
+            Map<String, Integer> sameNameMethodCount = new HashMap<>((int) (methods.length / 0.75f) + 1);
+            for (Method m : methods) {
+                sameNameMethodCount.compute(m.getName(),
+                        (key, oldValue) -> oldValue == null ? 1 : oldValue + 1);
+            }
+
             c3.append(" try{");
             for (Method m : methods) {
                 //ignore Object's method.
@@ -166,13 +195,7 @@ public abstract class Wrapper {
                 int len = m.getParameterTypes().length;
                 c3.append(" && ").append(" $3.length == ").append(len);
 
-                boolean overload = false;
-                for (Method m2 : methods) {
-                    if (m != m2 && m.getName().equals(m2.getName())) {
-                        overload = true;
-                        break;
-                    }
-                }
+                boolean overload = sameNameMethodCount.get(m.getName()) > 1;
                 if (overload) {
                     if (len > 0) {
                         for (int l = 0; l < len; l++) {
@@ -203,7 +226,7 @@ public abstract class Wrapper {
             c3.append(" }");
         }
 
-        c3.append(" throw new " + NoSuchMethodException.class.getName() + "(\"Not found method \\\"\"+$2+\"\\\" in class " + c.getName() + ".\"); }");
+        c3.append(" throw new ").append(NoSuchMethodException.class.getName()).append("(\"Not found method \\\"\"+$2+\"\\\" in class ").append(c.getName()).append(".\"); }");
 
         // deal with get/set method.
         Matcher matcher;
@@ -221,17 +244,17 @@ public abstract class Wrapper {
             } else if ((matcher = ReflectUtils.SETTER_METHOD_DESC_PATTERN.matcher(md)).matches()) {
                 Class<?> pt = method.getParameterTypes()[0];
                 String pn = propertyName(matcher.group(1));
-                c1.append(" if( $2.equals(\"").append(pn).append("\") ){ w.").append(method.getName()).append("(").append(arg(pt, "$3")).append("); return; }");
+                c1.append(" if( $2.equals(\"").append(pn).append("\") ){ w.").append(method.getName()).append('(').append(arg(pt, "$3")).append("); return; }");
                 pts.put(pn, pt);
             }
         }
-        c1.append(" throw new " + NoSuchPropertyException.class.getName() + "(\"Not found property \\\"\"+$2+\"\\\" field or setter method in class " + c.getName() + ".\"); }");
-        c2.append(" throw new " + NoSuchPropertyException.class.getName() + "(\"Not found property \\\"\"+$2+\"\\\" field or getter method in class " + c.getName() + ".\"); }");
+        c1.append(" throw new ").append(NoSuchPropertyException.class.getName()).append("(\"Not found property \\\"\"+$2+\"\\\" field or setter method in class ").append(c.getName()).append(".\"); }");
+        c2.append(" throw new ").append(NoSuchPropertyException.class.getName()).append("(\"Not found property \\\"\"+$2+\"\\\" field or getter method in class ").append(c.getName()).append(".\"); }");
 
         // make class
         long id = WRAPPER_CLASS_COUNTER.getAndIncrement();
         ClassGenerator cc = ClassGenerator.newInstance(cl);
-        cc.setClassName((Modifier.isPublic(c.getModifiers()) ? Wrapper.class.getName() : c.getName() + "$sw") + id);
+        cc.setClassName(c.getName() + "DubboWrap" + id);
         cc.setSuperClass(Wrapper.class);
 
         cc.addDefaultConstructor();
@@ -253,7 +276,7 @@ public abstract class Wrapper {
         cc.addMethod(c3.toString());
 
         try {
-            Class<?> wc = cc.toClass();
+            Class<?> wc = cc.toClass(c);
             // setup static field.
             wc.getField("pts").set(null, pts);
             wc.getField("pns").set(null, pts.keySet().toArray(new String[0]));
@@ -324,18 +347,6 @@ public abstract class Wrapper {
 
     private static String propertyName(String pn) {
         return pn.length() == 1 || Character.isLowerCase(pn.charAt(1)) ? Character.toLowerCase(pn.charAt(0)) + pn.substring(1) : pn;
-    }
-
-    private static boolean hasMethods(Method[] methods) {
-        if (methods == null || methods.length == 0) {
-            return false;
-        }
-        for (Method m : methods) {
-            if (m.getDeclaringClass() != Object.class) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**

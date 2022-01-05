@@ -16,12 +16,13 @@
  */
 package org.apache.dubbo.qos.server.handler;
 
+import org.apache.dubbo.common.logger.Logger;
+import org.apache.dubbo.common.logger.LoggerFactory;
+
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.timeout.IdleStateEvent;
-import org.apache.dubbo.common.logger.Logger;
-import org.apache.dubbo.common.logger.LoggerFactory;
 
 public class TelnetIdleEventHandler extends ChannelDuplexHandler {
     private static final Logger log = LoggerFactory.getLogger(TelnetIdleEventHandler.class);

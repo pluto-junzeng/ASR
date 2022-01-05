@@ -16,16 +16,18 @@
  */
 package org.apache.dubbo.spring.boot.actuate.endpoint.metadata;
 
+import org.apache.dubbo.config.ReferenceConfigBase;
 import org.apache.dubbo.config.spring.ServiceBean;
-import org.apache.dubbo.config.spring.beans.factory.annotation.ReferenceAnnotationBeanPostProcessor;
+import org.apache.dubbo.registry.support.RegistryManager;
+import org.apache.dubbo.rpc.model.ApplicationModel;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeMap;
-
-import static org.apache.dubbo.registry.support.AbstractRegistryFactory.getRegistries;
 
 /**
  * Dubbo Shutdown
@@ -35,13 +37,17 @@ import static org.apache.dubbo.registry.support.AbstractRegistryFactory.getRegis
 @Component
 public class DubboShutdownMetadata extends AbstractDubboMetadata {
 
+    @Autowired
+    private ApplicationModel applicationModel;
 
     public Map<String, Object> shutdown() throws Exception {
 
         Map<String, Object> shutdownCountData = new LinkedHashMap<>();
 
         // registries
-        int registriesCount = getRegistries().size();
+        RegistryManager registryManager = applicationModel.getBeanFactory().getBean(RegistryManager.class);
+
+        int registriesCount = registryManager.getRegistries().size();
 
         // protocols
         int protocolsCount = getProtocolConfigsBeanMap().size();
@@ -59,13 +65,11 @@ public class DubboShutdownMetadata extends AbstractDubboMetadata {
         shutdownCountData.put("services", serviceBeansMap.size());
 
         // Reference Beans
-        ReferenceAnnotationBeanPostProcessor beanPostProcessor = getReferenceAnnotationBeanPostProcessor();
-
-        int referencesCount = beanPostProcessor.getReferenceBeans().size();
-
-        beanPostProcessor.destroy();
-
-        shutdownCountData.put("references", referencesCount);
+        Collection<ReferenceConfigBase<?>> references = applicationModel.getDefaultModule().getConfigManager().getReferences();
+        for (ReferenceConfigBase<?> reference : references) {
+            reference.destroy();
+        }
+        shutdownCountData.put("references", references.size());
 
         // Set Result to complete
         Map<String, Object> shutdownData = new TreeMap<>();

@@ -18,12 +18,14 @@ package org.apache.dubbo.config;
 
 import org.apache.dubbo.common.utils.CollectionUtils;
 import org.apache.dubbo.config.support.Parameter;
+import org.apache.dubbo.rpc.model.ModuleModel;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 import static org.apache.dubbo.common.constants.CommonConstants.EXPORTER_LISTENER_KEY;
+import static org.apache.dubbo.common.constants.CommonConstants.EXPORT_ASYNC_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.SERVICE_FILTER_KEY;
 
 /**
@@ -33,7 +35,7 @@ import static org.apache.dubbo.common.constants.CommonConstants.SERVICE_FILTER_K
  */
 public abstract class AbstractServiceConfig extends AbstractInterfaceConfig {
 
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = -9026290350363878309L;
 
     /**
      * The service version
@@ -48,7 +50,7 @@ public abstract class AbstractServiceConfig extends AbstractInterfaceConfig {
     /**
      * whether the service is deprecated
      */
-    protected Boolean deprecated = false;
+    protected Boolean deprecated; // false;
 
     /**
      * The time delay register service (milliseconds)
@@ -75,7 +77,7 @@ public abstract class AbstractServiceConfig extends AbstractInterfaceConfig {
      * after the service registered,and it needs to be disabled manually; if you want to disable the service, you also need
      * manual processing
      */
-    protected Boolean dynamic = true;
+    protected Boolean dynamic; // true;
 
     /**
      * Whether to use token
@@ -99,7 +101,9 @@ public abstract class AbstractServiceConfig extends AbstractInterfaceConfig {
      */
     protected String protocolIds;
 
-    // max allowed execute times
+    /**
+     * Max allowed executing times
+     */
     private Integer executes;
 
     /**
@@ -117,18 +121,48 @@ public abstract class AbstractServiceConfig extends AbstractInterfaceConfig {
      */
     private String serialization;
 
+    /**
+     * Weather the service is export asynchronously
+     * @deprecated
+     * @see ModuleConfig#exportAsync
+     */
+    @Deprecated
+    private Boolean exportAsync;
+
+    public AbstractServiceConfig() {
+    }
+
+    public AbstractServiceConfig(ModuleModel moduleModel) {
+        super(moduleModel);
+    }
+
+    @Override
+    protected void checkDefault() {
+        super.checkDefault();
+        if (deprecated == null) {
+            deprecated = false;
+        }
+        if (dynamic == null) {
+            dynamic = true;
+        }
+    }
+
+    @Override
     public String getVersion() {
         return version;
     }
 
+    @Override
     public void setVersion(String version) {
         this.version = version;
     }
 
+    @Override
     public String getGroup() {
         return group;
     }
 
+    @Override
     public void setGroup(String group) {
         this.group = group;
     }
@@ -287,5 +321,16 @@ public abstract class AbstractServiceConfig extends AbstractInterfaceConfig {
 
     public void setSerialization(String serialization) {
         this.serialization = serialization;
+    }
+
+    @Deprecated
+    @Parameter(key = EXPORT_ASYNC_KEY)
+    public Boolean getExportAsync() {
+        return exportAsync;
+    }
+
+    @Deprecated
+    public void setExportAsync(Boolean exportAsync) {
+        this.exportAsync = exportAsync;
     }
 }

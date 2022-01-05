@@ -35,7 +35,7 @@ import java.util.Arrays;
 
 import static org.apache.dubbo.rpc.Constants.SCOPE_REMOTE;
 
-
+@Disabled
 public class InvokerSideConfigUrlTest extends UrlTestBase {
     private static final Logger log = LoggerFactory.getLogger(InvokerSideConfigUrlTest.class);
 
@@ -136,13 +136,13 @@ public class InvokerSideConfigUrlTest extends UrlTestBase {
     public void setUp() {
         initServConf();
         initRefConf();
-//        ApplicationModel.getConfigManager().clear();
+//        ApplicationModel.defaultModel().getConfigManager().clear();
     }
 
     @AfterEach()
     public void teardown() {
         //RegistryServer.reloadCache();
-//        ApplicationModel.getConfigManager().clear();
+//        ApplicationModel.defaultModel().getConfigManager().clear();
     }
 
 
@@ -151,7 +151,7 @@ public class InvokerSideConfigUrlTest extends UrlTestBase {
         verifyInvokerUrlGeneration(consumerConf, consumerConfTable);
     }
 
-    //@Test
+    @Test
     public void refConfUrlTest() {
         verifyInvokerUrlGeneration(refConf, refConfTable);
     }

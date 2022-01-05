@@ -104,6 +104,14 @@ public class LRUCache<K, V> extends LinkedHashMap<K, V> {
         }
     }
 
+    public void lock() {
+        lock.lock();
+    }
+
+    public void releaseLock() {
+        lock.unlock();
+    }
+
     public int getMaxCapacity() {
         return maxCapacity;
     }

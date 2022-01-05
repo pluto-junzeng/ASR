@@ -58,10 +58,7 @@ public class FailoverClusterInvoker<T> extends AbstractClusterInvoker<T> {
         List<Invoker<T>> copyInvokers = invokers;
         checkInvokers(copyInvokers, invocation);
         String methodName = RpcUtils.getMethodName(invocation);
-        int len = getUrl().getMethodParameter(methodName, RETRIES_KEY, DEFAULT_RETRIES) + 1;
-        if (len <= 0) {
-            len = 1;
-        }
+        int len = calculateInvokeTimes(methodName);
         // retry loop.
         RpcException le = null; // last exception.
         List<Invoker<T>> invoked = new ArrayList<Invoker<T>>(copyInvokers.size()); // invoked invokers.
@@ -77,9 +74,10 @@ public class FailoverClusterInvoker<T> extends AbstractClusterInvoker<T> {
             }
             Invoker<T> invoker = select(loadbalance, invocation, copyInvokers, invoked);
             invoked.add(invoker);
-            RpcContext.getContext().setInvokers((List) invoked);
+            RpcContext.getServiceContext().setInvokers((List) invoked);
+            boolean success = false;
             try {
-                Result result = invoker.invoke(invocation);
+                Result result = invokeWithContext(invoker, invocation);
                 if (le != null && logger.isWarnEnabled()) {
                     logger.warn("Although retry the method " + methodName
                             + " in the service " + getInterface().getName()
@@ -91,6 +89,7 @@ public class FailoverClusterInvoker<T> extends AbstractClusterInvoker<T> {
                             + " using the dubbo version " + Version.getVersion() + ". Last error is: "
                             + le.getMessage(), le);
                 }
+                success = true;
                 return result;
             } catch (RpcException e) {
                 if (e.isBiz()) { // biz exception.
@@ -100,7 +99,9 @@ public class FailoverClusterInvoker<T> extends AbstractClusterInvoker<T> {
             } catch (Throwable e) {
                 le = new RpcException(e.getMessage(), e);
             } finally {
-                providers.add(invoker.getUrl().getAddress());
+                if (!success) {
+                    providers.add(invoker.getUrl().getAddress());
+                }
             }
         }
         throw new RpcException(le.getCode(), "Failed to invoke the method "
@@ -111,6 +112,21 @@ public class FailoverClusterInvoker<T> extends AbstractClusterInvoker<T> {
                 + " on the consumer " + NetUtils.getLocalHost() + " using the dubbo version "
                 + Version.getVersion() + ". Last error is: "
                 + le.getMessage(), le.getCause() != null ? le.getCause() : le);
+    }
+
+    private int calculateInvokeTimes(String methodName) {
+        int len = getUrl().getMethodParameter(methodName, RETRIES_KEY, DEFAULT_RETRIES) + 1;
+        RpcContext rpcContext = RpcContext.getClientAttachment();
+        Object retry = rpcContext.getObjectAttachment(RETRIES_KEY);
+        if (retry instanceof Number) {
+            len = ((Number) retry).intValue() + 1;
+            rpcContext.removeAttachment(RETRIES_KEY);
+        }
+        if (len <= 0) {
+            len = 1;
+        }
+
+        return len;
     }
 
 }

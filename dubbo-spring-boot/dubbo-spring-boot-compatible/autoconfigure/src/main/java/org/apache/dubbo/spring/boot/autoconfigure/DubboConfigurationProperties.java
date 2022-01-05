@@ -17,13 +17,16 @@
 package org.apache.dubbo.spring.boot.autoconfigure;
 
 import org.apache.dubbo.config.ApplicationConfig;
+import org.apache.dubbo.config.ConfigKeys;
 import org.apache.dubbo.config.ConsumerConfig;
 import org.apache.dubbo.config.MetadataReportConfig;
+import org.apache.dubbo.config.MetricsConfig;
 import org.apache.dubbo.config.ModuleConfig;
 import org.apache.dubbo.config.MonitorConfig;
 import org.apache.dubbo.config.ProtocolConfig;
 import org.apache.dubbo.config.ProviderConfig;
 import org.apache.dubbo.config.RegistryConfig;
+import org.apache.dubbo.config.context.ConfigMode;
 import org.apache.dubbo.config.spring.ConfigCenterBean;
 import org.apache.dubbo.config.spring.context.annotation.EnableDubbo;
 
@@ -42,6 +45,7 @@ import static org.apache.dubbo.spring.boot.util.DubboUtils.DUBBO_PREFIX;
 /**
  * Dubbo {@link ConfigurationProperties Config Properties} only used to generate JSON metadata(non-public class)
  *
+ * @see ConfigKeys
  * @since 2.7.1
  */
 @ConfigurationProperties(DUBBO_PREFIX)
@@ -81,6 +85,9 @@ public class DubboConfigurationProperties {
     @NestedConfigurationProperty
     private MetadataReportConfig metadataReport = new MetadataReportConfig();
 
+    @NestedConfigurationProperty
+    private MetricsConfig metrics = new MetricsConfig();
+
     // Multiple Config Bindings
 
     private Map<String, ModuleConfig> modules = new LinkedHashMap<>();
@@ -98,6 +105,8 @@ public class DubboConfigurationProperties {
     private Map<String, ConfigCenterBean> configCenters = new LinkedHashMap<>();
 
     private Map<String, MetadataReportConfig> metadataReports = new LinkedHashMap<>();
+
+    private Map<String, MetricsConfig> metricses = new LinkedHashMap<>();
 
     public Config getConfig() {
         return config;
@@ -187,6 +196,14 @@ public class DubboConfigurationProperties {
         this.metadataReport = metadataReport;
     }
 
+    public MetricsConfig getMetrics() {
+        return metrics;
+    }
+
+    public void setMetrics(MetricsConfig metrics) {
+        this.metrics = metrics;
+    }
+
     public Map<String, ModuleConfig> getModules() {
         return modules;
     }
@@ -251,7 +268,21 @@ public class DubboConfigurationProperties {
         this.metadataReports = metadataReports;
     }
 
+    public Map<String, MetricsConfig> getMetricses() {
+        return metricses;
+    }
+
+    public void setMetricses(Map<String, MetricsConfig> metricses) {
+        this.metricses = metricses;
+    }
+
     static class Config {
+
+        /**
+         * Config processing mode
+         * @see ConfigMode
+         */
+        private ConfigMode mode = ConfigMode.STRICT;
 
         /**
          * Indicates multiple properties binding from externalized configuration or not.
@@ -277,6 +308,14 @@ public class DubboConfigurationProperties {
 
         public void setMultiple(boolean multiple) {
             this.multiple = multiple;
+        }
+
+        public ConfigMode getMode() {
+            return mode;
+        }
+
+        public void setMode(ConfigMode mode) {
+            this.mode = mode;
         }
     }
 

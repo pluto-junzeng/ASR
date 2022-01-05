@@ -17,6 +17,8 @@
 package org.apache.dubbo.spring.boot.context.event;
 
 import org.apache.dubbo.common.lang.ShutdownHookCallbacks;
+import org.apache.dubbo.config.spring.util.DubboBeanUtils;
+import org.apache.dubbo.rpc.model.ApplicationModel;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,26 +58,26 @@ public class AwaitingNonWebApplicationListener implements SmartApplicationListen
     private static final Class<? extends ApplicationEvent>[] SUPPORTED_APPLICATION_EVENTS =
             of(ApplicationReadyEvent.class, ContextClosedEvent.class);
 
-    private static final AtomicBoolean awaited = new AtomicBoolean(false);
+    private final AtomicBoolean awaited = new AtomicBoolean(false);
 
     private static final Integer UNDEFINED_ID = Integer.valueOf(-1);
 
     /**
      * Target the application id
      */
-    private static final AtomicInteger applicationContextId = new AtomicInteger(UNDEFINED_ID);
+    private final AtomicInteger applicationContextId = new AtomicInteger(UNDEFINED_ID);
 
-    private static final Lock lock = new ReentrantLock();
+    private final Lock lock = new ReentrantLock();
 
-    private static final Condition condition = lock.newCondition();
+    private final Condition condition = lock.newCondition();
 
-    private static final ExecutorService executorService = newSingleThreadExecutor();
+    private final ExecutorService executorService = newSingleThreadExecutor();
 
     private static <T> T[] of(T... values) {
         return values;
     }
 
-    static AtomicBoolean getAwaited() {
+    AtomicBoolean getAwaited() {
         return awaited;
     }
 
@@ -111,15 +113,23 @@ public class AwaitingNonWebApplicationListener implements SmartApplicationListen
 
         if (applicationContextId.compareAndSet(UNDEFINED_ID, applicationContext.hashCode())) {
             await();
-            releaseOnExit();
+            releaseOnExit(event.getApplicationContext());
         }
     }
 
     /**
      * @since 2.7.8
+     * @param applicationContext
      */
-    private void releaseOnExit() {
-        ShutdownHookCallbacks.INSTANCE.addCallback(this::release);
+    private void releaseOnExit(ConfigurableApplicationContext applicationContext) {
+        ApplicationModel applicationModel = DubboBeanUtils.getApplicationModel(applicationContext);
+        if (applicationModel == null) {
+            return;
+        }
+        ShutdownHookCallbacks shutdownHookCallbacks = applicationModel.getBeanFactory().getBean(ShutdownHookCallbacks.class);
+        if (shutdownHookCallbacks != null) {
+            shutdownHookCallbacks.addCallback(this::release);
+        }
     }
 
     private boolean isRootApplicationContext(ApplicationContext applicationContext) {

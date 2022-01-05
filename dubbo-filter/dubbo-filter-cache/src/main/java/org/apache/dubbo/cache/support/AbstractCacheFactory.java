@@ -44,26 +44,43 @@ public abstract class AbstractCacheFactory implements CacheFactory {
      */
     private final ConcurrentMap<String, Cache> caches = new ConcurrentHashMap<String, Cache>();
 
+    private final Object MONITOR = new Object();
+
     /**
-     *  Takes URL and invocation instance and return cache instance for a given url.
-     * @param url url of the method
+     * Takes URL and invocation instance and return cache instance for a given url.
+     *
+     * @param url        url of the method
      * @param invocation invocation context.
      * @return Instance of cache store used as storage for caching return values.
      */
     @Override
     public Cache getCache(URL url, Invocation invocation) {
         url = url.addParameter(METHOD_KEY, invocation.getMethodName());
-        String key = url.toFullString();
+        String key = url.getServiceKey() + invocation.getMethodName();
         Cache cache = caches.get(key);
-        if (cache == null) {
-            caches.put(key, createCache(url));
-            cache = caches.get(key);
+
+        // get from cache first.
+        if (null != cache) {
+            return cache;
         }
+
+        synchronized (MONITOR) {
+            // double check.
+            cache = caches.get(key);
+            if (null != cache) {
+                return cache;
+            }
+
+            cache = createCache(url);
+            caches.put(key, cache);
+        }
+
         return cache;
     }
 
     /**
      * Takes url as an method argument and return new instance of cache store implemented by AbstractCacheFactory subclass.
+     *
      * @param url url of the method
      * @return Create and return new instance of cache store used as storage for caching return values.
      */

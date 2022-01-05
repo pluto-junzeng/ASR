@@ -21,7 +21,6 @@ import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
 import org.apache.dubbo.common.utils.ConcurrentHashSet;
 import org.apache.dubbo.common.utils.ConfigUtils;
-import org.apache.dubbo.common.utils.NamedThreadFactory;
 import org.apache.dubbo.rpc.Filter;
 import org.apache.dubbo.rpc.Invocation;
 import org.apache.dubbo.rpc.Invoker;
@@ -39,9 +38,8 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.dubbo.common.constants.CommonConstants.PROVIDER;
 import static org.apache.dubbo.rpc.Constants.ACCESS_LOG_KEY;
@@ -52,8 +50,6 @@ import static org.apache.dubbo.rpc.Constants.ACCESS_LOG_KEY;
  * Logger key is <code><b>dubbo.accesslog</b></code>.
  * In order to configure access log appear in the specified appender only, additivity need to be configured in log4j's
  * config file, for example:
- * 打印每一次请求的访问日志。如果需要访问的日志只出现在指定的appender中，则可以在
- * log4j's 的配置文件中配置additivity
  * <code>
  * <pre>
  * &lt;logger name="<b>dubbo.accesslog</b>" <font color="red">additivity="false"</font>&gt;
@@ -76,25 +72,22 @@ public class AccessLogFilter implements Filter {
     private static final String FILE_DATE_FORMAT = "yyyyMMdd";
 
     // It's safe to declare it as singleton since it runs on single thread only
-    private static final DateFormat FILE_NAME_FORMATTER = new SimpleDateFormat(FILE_DATE_FORMAT);
+    private final DateFormat fileNameFormatter = new SimpleDateFormat(FILE_DATE_FORMAT);
 
-    private static final Map<String, Set<AccessLogData>> LOG_ENTRIES = new ConcurrentHashMap<>();
+    private final Map<String, Set<AccessLogData>> logEntries = new ConcurrentHashMap<>();
 
-    private static final ScheduledExecutorService LOG_SCHEDULED = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Dubbo-Access-Log", true));
+    private AtomicBoolean scheduled = new AtomicBoolean();
 
     /**
      * Default constructor initialize demon thread for writing into access log file with names with access log key
      * defined in url <b>accesslog</b>
      */
     public AccessLogFilter() {
-        LOG_SCHEDULED.scheduleWithFixedDelay(this::writeLogToFile, LOG_OUTPUT_INTERVAL, LOG_OUTPUT_INTERVAL, TimeUnit.MILLISECONDS);
     }
 
     /**
      * This method logs the access log for service method invocation call.
-     * （1） 获取参数。获取上下文、接口名、版本、分组信息等参数，用于日志的构建。
-     * （2） 构建日志字符串。根据步骤（1）中的数据开始组装日志，最终会得到一个日志字符串
-     * （3） 打印日志
+     *
      * @param invoker service
      * @param inv     Invocation service method.
      * @return Result from service method.
@@ -102,6 +95,10 @@ public class AccessLogFilter implements Filter {
      */
     @Override
     public Result invoke(Invoker<?> invoker, Invocation inv) throws RpcException {
+        if (scheduled.compareAndSet(false, true)) {
+            inv.getModuleModel().getApplicationModel().getApplicationExecutorRepository().getSharedScheduledExecutor()
+                .scheduleWithFixedDelay(this::writeLogToFile, LOG_OUTPUT_INTERVAL, LOG_OUTPUT_INTERVAL, TimeUnit.MILLISECONDS);
+        }
         try {
             String accessLogKey = invoker.getUrl().getParameter(ACCESS_LOG_KEY);
             if (ConfigUtils.isNotEmpty(accessLogKey)) {
@@ -116,7 +113,7 @@ public class AccessLogFilter implements Filter {
     }
 
     private void log(String accessLog, AccessLogData accessLogData) {
-        Set<AccessLogData> logSet = LOG_ENTRIES.computeIfAbsent(accessLog, k -> new ConcurrentHashSet<>());
+        Set<AccessLogData> logSet = logEntries.computeIfAbsent(accessLog, k -> new ConcurrentHashSet<>());
 
         if (logSet.size() < LOG_MAX_BUFFER) {
             logSet.add(accessLogData);
@@ -148,10 +145,8 @@ public class AccessLogFilter implements Filter {
     }
 
     private void writeLogToFile() {
-        // 因为 set 是无序的，所以打印出来的也有可能是无序的
-        // TODO 这里 为什么不使用有序的呢？或者栈
-        if (!LOG_ENTRIES.isEmpty()) {
-            for (Map.Entry<String, Set<AccessLogData>> entry : LOG_ENTRIES.entrySet()) {
+        if (!logEntries.isEmpty()) {
+            for (Map.Entry<String, Set<AccessLogData>> entry : logEntries.entrySet()) {
                 String accessLog = entry.getKey();
                 Set<AccessLogData> logSet = entry.getValue();
                 writeLogSetToFile(accessLog, logSet);
@@ -169,6 +164,18 @@ public class AccessLogFilter implements Filter {
             }
             writer.flush();
         }
+    }
+
+    private AccessLogData buildAccessLogData(Invoker<?> invoker, Invocation inv) {
+        AccessLogData logData = AccessLogData.newLogData();
+        logData.setServiceName(invoker.getInterface().getName());
+        logData.setMethodName(inv.getMethodName());
+        logData.setVersion(invoker.getUrl().getVersion());
+        logData.setGroup(invoker.getUrl().getGroup());
+        logData.setInvocationTime(new Date());
+        logData.setTypes(inv.getParameterTypes());
+        logData.setArguments(inv.getArguments());
+        return logData;
     }
 
     private void processWithServiceLogger(Set<AccessLogData> logSet) {
@@ -189,8 +196,8 @@ public class AccessLogFilter implements Filter {
 
     private void renameFile(File file) {
         if (file.exists()) {
-            String now = FILE_NAME_FORMATTER.format(new Date());
-            String last = FILE_NAME_FORMATTER.format(new Date(file.lastModified()));
+            String now = fileNameFormatter.format(new Date());
+            String last = fileNameFormatter.format(new Date(file.lastModified()));
             if (!now.equals(last)) {
                 File archive = new File(file.getAbsolutePath() + "." + last);
                 file.renameTo(archive);

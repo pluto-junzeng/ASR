@@ -22,6 +22,15 @@ public class JavaCodeTest {
 
     public final static AtomicInteger SUBFIX = new AtomicInteger(8);
 
+    boolean shouldIgnoreWithoutPackage() {
+        String jdkVersion = System.getProperty("java.specification.version");
+        try {
+            return Integer.parseInt(jdkVersion) > 15;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     String getSimpleCode() {
         StringBuilder code = new StringBuilder();
         code.append("package org.apache.dubbo.common.compiler.support;");
@@ -30,7 +39,7 @@ public class JavaCodeTest {
         code.append("   public String sayHello() { ");
         code.append("       return \"Hello world!\"; ");
         code.append("   }");
-        code.append("}");
+        code.append('}');
         return code.toString();
     }
 
@@ -40,7 +49,7 @@ public class JavaCodeTest {
         code.append("   public String sayHello() { ");
         code.append("       return \"Hello world!\"; ");
         code.append("   }");
-        code.append("}");
+        code.append('}');
         return code.toString();
     }
 
@@ -80,7 +89,7 @@ public class JavaCodeTest {
         code.append("   public String sayHello() { ");
         code.append("       return \"Hello world!\"; ");
         code.append("   }");
-        code.append("}");
+        code.append('}');
         return code.toString();
     }
 
@@ -95,7 +104,7 @@ public class JavaCodeTest {
         code.append("   public String sayHello() { ");
         code.append("       return \"Hello world3!\"; ");
         code.append("   }");
-        code.append("}");
+        code.append('}');
         return code.toString();
     }
 }

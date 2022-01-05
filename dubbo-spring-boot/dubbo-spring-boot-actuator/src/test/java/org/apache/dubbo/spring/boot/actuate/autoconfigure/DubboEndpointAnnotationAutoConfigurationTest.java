@@ -16,8 +16,10 @@
  */
 package org.apache.dubbo.spring.boot.actuate.autoconfigure;
 
+import org.apache.dubbo.common.BaseServiceMetadata;
+import org.apache.dubbo.config.annotation.DubboReference;
 import org.apache.dubbo.config.annotation.DubboService;
-import org.apache.dubbo.rpc.model.ApplicationModel;
+import org.apache.dubbo.config.bootstrap.DubboBootstrap;
 import org.apache.dubbo.spring.boot.actuate.endpoint.DubboConfigsMetadataEndpoint;
 import org.apache.dubbo.spring.boot.actuate.endpoint.DubboMetadataEndpoint;
 import org.apache.dubbo.spring.boot.actuate.endpoint.DubboPropertiesMetadataEndpoint;
@@ -27,16 +29,18 @@ import org.apache.dubbo.spring.boot.actuate.endpoint.DubboShutdownEndpoint;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
@@ -48,10 +52,11 @@ import java.util.function.Supplier;
  *
  * @since 2.7.0
  */
-@RunWith(SpringRunner.class)
+@ExtendWith(SpringExtension.class)
 @SpringBootTest(
         classes = {
-                DubboEndpointAnnotationAutoConfigurationTest.class
+                DubboEndpointAnnotationAutoConfigurationTest.class,
+                DubboEndpointAnnotationAutoConfigurationTest.ConsumerConfiguration.class
         },
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
@@ -77,6 +82,7 @@ import java.util.function.Supplier;
                 "management.endpoints.web.exposure.include = *",
         })
 @EnableAutoConfiguration
+@Disabled
 public class DubboEndpointAnnotationAutoConfigurationTest {
 
     @Autowired
@@ -105,14 +111,14 @@ public class DubboEndpointAnnotationAutoConfigurationTest {
     @Value("http://127.0.0.1:${local.management.port}${management.endpoints.web.base-path:/actuator}")
     private String actuatorBaseURL;
 
-    @Before
+    @BeforeEach
     public void init() {
-        ApplicationModel.reset();
+        DubboBootstrap.reset();
     }
 
-    @After
+    @AfterEach
     public void destroy() {
-        ApplicationModel.reset();
+        DubboBootstrap.reset();
     }
 
     @Test
@@ -184,8 +190,13 @@ public class DubboEndpointAnnotationAutoConfigurationTest {
 
         Map<String, Map<String, Object>> references = dubboReferencesMetadataEndpoint.references();
 
-        Assert.assertTrue(references.isEmpty());
-
+        Assert.assertTrue(!references.isEmpty());
+        String injectedField = "private " + DemoService.class.getName() + " " + ConsumerConfiguration.class.getName() + ".demoService";
+        Map<String, Object> referenceMap = references.get(injectedField);
+        Assert.assertNotNull(referenceMap);
+        Assert.assertEquals(DemoService.class, referenceMap.get("interfaceClass"));
+        Assert.assertEquals(BaseServiceMetadata.buildServiceKey(DemoService.class.getName(),ConsumerConfiguration.DEMO_GROUP,ConsumerConfiguration.DEMO_VERSION),
+                referenceMap.get("uniqueServiceName"));
     }
 
     @Test
@@ -241,5 +252,13 @@ public class DubboEndpointAnnotationAutoConfigurationTest {
 
     }
 
+    @Configuration
+    static class ConsumerConfiguration {
+        public static final String DEMO_GROUP = "demo";
+        public static final String DEMO_VERSION = "1.0.0";
 
+        @DubboReference(group = DEMO_GROUP, version = DEMO_VERSION)
+        private DemoService demoService;
+
+    }
 }

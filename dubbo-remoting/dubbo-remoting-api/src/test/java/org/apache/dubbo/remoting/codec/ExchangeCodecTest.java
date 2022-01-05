@@ -43,7 +43,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.apache.dubbo.common.constants.CommonConstants.READONLY_EVENT;
-import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  *
@@ -186,12 +185,19 @@ public class ExchangeCodecTest extends TelnetCodecTest {
     public void test_Decode_Check_Payload() throws IOException {
         byte[] header = new byte[]{MAGIC_HIGH, MAGIC_LOW, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
         byte[] request = assemblyDataProtocol(header);
+
         try {
-            testDecode_assertEquals(request, TelnetCodec.DecodeResult.NEED_MORE_INPUT);
-            fail();
+            Channel channel = getServerSideChannel(url);
+            ChannelBuffer buffer = ChannelBuffers.wrappedBuffer(request);
+            Object obj = codec.decode(channel, buffer);
+
+            Assertions.assertTrue(obj instanceof Response);
+            Assertions.assertTrue(((Response) obj).getErrorMessage().startsWith(
+                    "Data length too large: " + Bytes.bytes2int(new byte[]{1, 1, 1, 1})));
         } catch (IOException expected) {
             Assertions.assertTrue(expected.getMessage().startsWith("Data length too large: " + Bytes.bytes2int(new byte[]{1, 1, 1, 1})));
         }
+
     }
 
     @Test
@@ -345,7 +351,7 @@ public class ExchangeCodecTest extends TelnetCodecTest {
     @Test
     public void test_Encode_Request() throws IOException {
         ChannelBuffer encodeBuffer = ChannelBuffers.dynamicBuffer(2014);
-        Channel channel = getCliendSideChannel(url);
+        Channel channel = getClientSideChannel(url);
         Request request = new Request();
         Person person = new Person();
         request.setData(person);
@@ -366,7 +372,7 @@ public class ExchangeCodecTest extends TelnetCodecTest {
     @Test
     public void test_Encode_Response() throws IOException {
         ChannelBuffer encodeBuffer = ChannelBuffers.dynamicBuffer(1024);
-        Channel channel = getCliendSideChannel(url);
+        Channel channel = getClientSideChannel(url);
         Response response = new Response();
         response.setHeartbeat(true);
         response.setId(1001L);
@@ -395,7 +401,7 @@ public class ExchangeCodecTest extends TelnetCodecTest {
     @Test
     public void test_Encode_Error_Response() throws IOException {
         ChannelBuffer encodeBuffer = ChannelBuffers.dynamicBuffer(1024);
-        Channel channel = getCliendSideChannel(url);
+        Channel channel = getClientSideChannel(url);
         Response response = new Response();
         response.setHeartbeat(true);
         response.setId(1001L);
@@ -423,7 +429,7 @@ public class ExchangeCodecTest extends TelnetCodecTest {
 
     @Test
     public void testMessageLengthGreaterThanMessageActualLength() throws Exception {
-        Channel channel = getCliendSideChannel(url);
+        Channel channel = getClientSideChannel(url);
         Request request = new Request(1L);
         request.setVersion(Version.getProtocolVersion());
         Date date = new Date();
@@ -460,7 +466,7 @@ public class ExchangeCodecTest extends TelnetCodecTest {
         Request request = new Request(1L);
         request.setData("hello");
         ChannelBuffer encodeBuffer = ChannelBuffers.dynamicBuffer(512);
-        AbstractMockChannel channel = getCliendSideChannel(url.addParameter(Constants.PAYLOAD_KEY, 4));
+        AbstractMockChannel channel = getClientSideChannel(url.addParameter(Constants.PAYLOAD_KEY, 4));
         try {
             codec.encode(channel, encodeBuffer, request);
             Assertions.fail();

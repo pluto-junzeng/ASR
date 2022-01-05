@@ -17,6 +17,7 @@
 
 package org.apache.dubbo.common.threadlocal;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -32,6 +33,11 @@ public class InternalThreadLocalTest {
     private static final int PERFORMANCE_THREAD_COUNT = 1000;
 
     private static final int GET_COUNT = 1000000;
+
+    @AfterEach
+    public void setup() {
+        InternalThreadLocalMap.remove();
+    }
 
     @Test
     public void testInternalThreadLocal() throws InterruptedException {
@@ -79,6 +85,7 @@ public class InternalThreadLocalTest {
         final InternalThreadLocal<String> internalThreadLocalString = new InternalThreadLocal<String>();
         internalThreadLocalString.set("value");
         Assertions.assertEquals(2, InternalThreadLocal.size(), "size method is wrong!");
+        InternalThreadLocal.removeAll();
     }
 
     @Test

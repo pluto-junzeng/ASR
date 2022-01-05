@@ -32,7 +32,7 @@ import static org.apache.dubbo.rpc.Constants.TOKEN_KEY;
 
 /**
  * Perform check whether given provider token is matching with remote token or not. If it does not match
- * it will not allow to invoke remote method.
+ * it will not allow invoking remote method.
  *
  * @see Filter
  */
@@ -48,9 +48,9 @@ public class TokenFilter implements Filter {
             Map<String, Object> attachments = inv.getObjectAttachments();
             String remoteToken = (attachments == null ? null : (String) attachments.get(TOKEN_KEY));
             if (!token.equals(remoteToken)) {
-                throw new RpcException("Invalid token! Forbid invoke remote service " + serviceType + " method " + inv.getMethodName()
-                        + "() from consumer " + RpcContext.getContext().getRemoteHost() + " to provider " + RpcContext.getContext().getLocalHost()
-                        + ", consumer incorrect token is " + remoteToken);
+                throw new RpcException("Invalid token! Forbid invoke remote service " + serviceType + " method " + inv.getMethodName() +
+                        "() from consumer " + RpcContext.getServiceContext().getRemoteHost() + " to provider " +
+                        RpcContext.getServiceContext().getLocalHost()+ ", consumer incorrect token is " + remoteToken);
             }
         }
         return invoker.invoke(inv);

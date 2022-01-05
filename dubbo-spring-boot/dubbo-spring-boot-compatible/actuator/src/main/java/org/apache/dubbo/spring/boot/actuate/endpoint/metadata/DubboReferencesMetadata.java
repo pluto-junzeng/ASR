@@ -16,6 +16,7 @@
  */
 package org.apache.dubbo.spring.boot.actuate.endpoint.metadata;
 
+import org.apache.dubbo.config.ReferenceConfig;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.apache.dubbo.config.spring.ReferenceBean;
 import org.apache.dubbo.config.spring.beans.factory.annotation.ReferenceAnnotationBeanPostProcessor;
@@ -23,6 +24,7 @@ import org.apache.dubbo.config.spring.beans.factory.annotation.ReferenceAnnotati
 import org.springframework.beans.factory.annotation.InjectionMetadata;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -36,7 +38,7 @@ public class DubboReferencesMetadata extends AbstractDubboMetadata {
 
     public Map<String, Map<String, Object>> references() {
 
-        Map<String, Map<String, Object>> referencesMetadata = new LinkedHashMap<>();
+        Map<String, Map<String, Object>> referencesMetadata = new HashMap<>();
 
         ReferenceAnnotationBeanPostProcessor beanPostProcessor = getReferenceAnnotationBeanPostProcessor();
 
@@ -49,7 +51,7 @@ public class DubboReferencesMetadata extends AbstractDubboMetadata {
 
     private Map<String, Map<String, Object>> buildReferencesMetadata(
             Map<InjectionMetadata.InjectedElement, ReferenceBean<?>> injectedElementReferenceBeanMap) {
-        Map<String, Map<String, Object>> referencesMetadata = new LinkedHashMap<>();
+        Map<String, Map<String, Object>> referencesMetadata = new HashMap<>();
 
         for (Map.Entry<InjectionMetadata.InjectedElement, ReferenceBean<?>> entry :
                 injectedElementReferenceBeanMap.entrySet()) {
@@ -57,9 +59,16 @@ public class DubboReferencesMetadata extends AbstractDubboMetadata {
             InjectionMetadata.InjectedElement injectedElement = entry.getKey();
 
             ReferenceBean<?> referenceBean = entry.getValue();
+            ReferenceConfig referenceConfig = referenceBean.getReferenceConfig();
 
-            Map<String, Object> beanMetadata = resolveBeanMetadata(referenceBean);
-            beanMetadata.put("invoker", resolveBeanMetadata(referenceBean.get()));
+            Map<String, Object> beanMetadata = null;
+            if (referenceConfig != null) {
+                beanMetadata = resolveBeanMetadata(referenceConfig);
+                //beanMetadata.put("invoker", resolveBeanMetadata(referenceBean.get()));
+            } else {
+                // referenceBean is not initialized
+                beanMetadata = new LinkedHashMap<>();
+            }
 
             referencesMetadata.put(String.valueOf(injectedElement.getMember()), beanMetadata);
 

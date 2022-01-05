@@ -190,7 +190,9 @@ public class GenericImplFilter implements Filter, Filter.Listener {
                     if (targetException != null) {
                         try {
                             Field field = Throwable.class.getDeclaredField("detailMessage");
-                            ReflectUtils.makeAccessible(field);
+                            if (!field.isAccessible()) {
+                                field.setAccessible(true);
+                            }
                             field.set(targetException, exception.getExceptionMessage());
                         } catch (Throwable e) {
                             logger.warn(e.getMessage(), e);

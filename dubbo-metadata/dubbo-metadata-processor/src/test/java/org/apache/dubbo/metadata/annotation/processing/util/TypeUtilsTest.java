@@ -451,7 +451,7 @@ public class TypeUtilsTest extends AbstractAnnotationProcessingTest {
     }
 
     @Test
-    @Disabled("Failed due to github action env problem")
+    @Disabled
     public void testGetResource() throws URISyntaxException {
         URL resource = getResource(processingEnv, testType);
         assertNotNull(resource);

@@ -17,22 +17,30 @@
 package org.apache.dubbo.common.extension.support;
 
 import org.apache.dubbo.common.extension.Activate;
+import org.apache.dubbo.common.extension.ExtensionDirector;
 import org.apache.dubbo.common.extension.ExtensionLoader;
 import org.apache.dubbo.common.extension.SPI;
 import org.apache.dubbo.common.utils.ArrayUtils;
 
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * OrderComparator
  */
-public class ActivateComparator implements Comparator<Object> {
+public class ActivateComparator implements Comparator<Class<?>> {
 
-    public static final Comparator<Object> COMPARATOR = new ActivateComparator();
+    private final ExtensionDirector extensionDirector;
+    private final Map<Class<?>, ActivateInfo> activateInfoMap = new ConcurrentHashMap<>();
+
+    public ActivateComparator(ExtensionDirector extensionDirector) {
+        this.extensionDirector = extensionDirector;
+    }
 
     @Override
-    public int compare(Object o1, Object o2) {
+    public int compare(Class o1, Class o2) {
         if (o1 == null && o2 == null) {
             return 0;
         }
@@ -46,15 +54,15 @@ public class ActivateComparator implements Comparator<Object> {
             return 0;
         }
 
-        Class<?> inf = findSpi(o1.getClass());
+        Class<?> inf = findSpi(o1);
 
-        ActivateInfo a1 = parseActivate(o1.getClass());
-        ActivateInfo a2 = parseActivate(o2.getClass());
+        ActivateInfo a1 = parseActivate(o1);
+        ActivateInfo a2 = parseActivate(o2);
 
         if ((a1.applicableToCompare() || a2.applicableToCompare()) && inf != null) {
-            ExtensionLoader<?> extensionLoader = ExtensionLoader.getExtensionLoader(inf);
+            ExtensionLoader<?> extensionLoader = extensionDirector.getExtensionLoader(inf);
             if (a1.applicableToCompare()) {
-                String n2 = extensionLoader.getExtensionName(o2.getClass());
+                String n2 = extensionLoader.getExtensionName(o2);
                 if (a1.isLess(n2)) {
                     return -1;
                 }
@@ -65,7 +73,7 @@ public class ActivateComparator implements Comparator<Object> {
             }
 
             if (a2.applicableToCompare()) {
-                String n1 = extensionLoader.getExtensionName(o1.getClass());
+                String n1 = extensionLoader.getExtensionName(o1);
                 if (a2.isLess(n1)) {
                     return 1;
                 }
@@ -74,12 +82,23 @@ public class ActivateComparator implements Comparator<Object> {
                     return -1;
                 }
             }
+
+            return a1.order > a2.order ? 1 : -1;
         }
-        // never return 0 even if n1 equals n2, otherwise, o1 and o2 will override each other in collection like HashSet
-        return a1.order > a2.order ? 1 : -1;
+
+        // In order to avoid the problem of inconsistency between the loading order of two filters
+        // in different loading scenarios without specifying the order attribute of the filter,
+        // when the order is the same, compare its filterName
+        if (a1.order > a2.order) {
+            return 1;
+        } else if (a1.order == a2.order) {
+            return o1.getSimpleName().compareTo(o2.getSimpleName()) > 0 ? 1 : -1;
+        } else {
+            return -1;
+        }
     }
 
-    private Class<?> findSpi(Class clazz) {
+    private Class<?> findSpi(Class<?> clazz) {
         if (clazz.getInterfaces().length == 0) {
             return null;
         }
@@ -88,7 +107,7 @@ public class ActivateComparator implements Comparator<Object> {
             if (intf.isAnnotationPresent(SPI.class)) {
                 return intf;
             } else {
-                Class result = findSpi(intf);
+                Class<?> result = findSpi(intf);
                 if (result != null) {
                     return result;
                 }
@@ -99,19 +118,26 @@ public class ActivateComparator implements Comparator<Object> {
     }
 
     private ActivateInfo parseActivate(Class<?> clazz) {
-        ActivateInfo info = new ActivateInfo();
+        ActivateInfo info = activateInfoMap.get(clazz);
+        if (info != null) {
+            return info;
+        }
+        info = new ActivateInfo();
         if (clazz.isAnnotationPresent(Activate.class)) {
             Activate activate = clazz.getAnnotation(Activate.class);
             info.before = activate.before();
             info.after = activate.after();
             info.order = activate.order();
-        } else {
+        } else if (clazz.isAnnotationPresent(com.alibaba.dubbo.common.extension.Activate.class)) {
             com.alibaba.dubbo.common.extension.Activate activate = clazz.getAnnotation(
-                    com.alibaba.dubbo.common.extension.Activate.class);
+                com.alibaba.dubbo.common.extension.Activate.class);
             info.before = activate.before();
             info.after = activate.after();
             info.order = activate.order();
+        } else {
+            info.order = 0;
         }
+        activateInfoMap.put(clazz, info);
         return info;
     }
 

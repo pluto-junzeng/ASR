@@ -16,8 +16,10 @@
  */
 package org.apache.dubbo.config.spring.beans.factory.config;
 
-import org.apache.dubbo.rpc.model.ApplicationModel;
+import org.apache.dubbo.config.bootstrap.DubboBootstrap;
+import org.apache.dubbo.config.spring.ServiceBean;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,15 +30,19 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
+import java.util.Map;
+
+import static org.springframework.test.annotation.DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD;
+
 @ExtendWith(SpringExtension.class)
 @ContextConfiguration(classes = MultipleServicesWithMethodConfigsTest.class)
+@DirtiesContext(classMode = AFTER_EACH_TEST_METHOD)
 @ImportResource(locations = "classpath:/META-INF/spring/multiple-services-with-methods.xml")
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 public class MultipleServicesWithMethodConfigsTest {
 
     @BeforeAll
     public static void setUp() {
-        ApplicationModel.reset();
+        DubboBootstrap.reset();
     }
 
     @Autowired
@@ -44,8 +50,11 @@ public class MultipleServicesWithMethodConfigsTest {
 
     @Test
     public void test() {
-//        Map<String, MethodConfig> methodConfigs = applicationContext.getBeansOfType(MethodConfig.class);
-//        assertEquals(2, methodConfigs.size());
+
+        Map<String, ServiceBean> serviceBeanMap = applicationContext.getBeansOfType(ServiceBean.class);
+        for (ServiceBean serviceBean : serviceBeanMap.values()) {
+            Assertions.assertEquals(1, serviceBean.getMethods().size());
+        }
     }
 }
 

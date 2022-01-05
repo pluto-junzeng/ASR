@@ -21,6 +21,7 @@ import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
 import org.apache.dubbo.common.utils.CollectionUtils;
+import org.apache.dubbo.common.utils.UrlUtils;
 
 import java.util.List;
 
@@ -54,14 +55,16 @@ public class ListenerRegistryWrapper implements Registry {
     @Override
     public void register(URL url) {
         try {
-            registry.register(url);
+            if (registry != null) {
+                registry.register(url);
+            }
         } finally {
-            if (CollectionUtils.isNotEmpty(listeners)) {
+            if (CollectionUtils.isNotEmpty(listeners) && !UrlUtils.isConsumer(url)) {
                 RuntimeException exception = null;
                 for (RegistryServiceListener listener : listeners) {
                     if (listener != null) {
                         try {
-                            listener.onRegister(url);
+                            listener.onRegister(url, registry);
                         } catch (RuntimeException t) {
                             logger.error(t.getMessage(), t);
                             exception = t;
@@ -78,14 +81,16 @@ public class ListenerRegistryWrapper implements Registry {
     @Override
     public void unregister(URL url) {
         try {
-            registry.unregister(url);
+            if (registry != null) {
+                registry.unregister(url);
+            }
         } finally {
-            if (CollectionUtils.isNotEmpty(listeners)) {
+            if (CollectionUtils.isNotEmpty(listeners) && !UrlUtils.isConsumer(url)) {
                 RuntimeException exception = null;
                 for (RegistryServiceListener listener : listeners) {
                     if (listener != null) {
                         try {
-                            listener.onUnregister(url);
+                            listener.onUnregister(url, registry);
                         } catch (RuntimeException t) {
                             logger.error(t.getMessage(), t);
                             exception = t;
@@ -102,14 +107,16 @@ public class ListenerRegistryWrapper implements Registry {
     @Override
     public void subscribe(URL url, NotifyListener listener) {
         try {
-            registry.subscribe(url, listener);
+            if (registry != null) {
+                registry.subscribe(url, listener);
+            }
         } finally {
             if (CollectionUtils.isNotEmpty(listeners)) {
                 RuntimeException exception = null;
                 for (RegistryServiceListener registryListener : listeners) {
                     if (registryListener != null) {
                         try {
-                            registryListener.onSubscribe(url);
+                            registryListener.onSubscribe(url, registry);
                         } catch (RuntimeException t) {
                             logger.error(t.getMessage(), t);
                             exception = t;
@@ -133,7 +140,7 @@ public class ListenerRegistryWrapper implements Registry {
                 for (RegistryServiceListener registryListener : listeners) {
                     if (registryListener != null) {
                         try {
-                            registryListener.onUnsubscribe(url);
+                            registryListener.onUnsubscribe(url, registry);
                         } catch (RuntimeException t) {
                             logger.error(t.getMessage(), t);
                             exception = t;
@@ -145,6 +152,11 @@ public class ListenerRegistryWrapper implements Registry {
                 }
             }
         }
+    }
+
+    @Override
+    public boolean isServiceDiscovery() {
+        return registry.isServiceDiscovery();
     }
 
     @Override

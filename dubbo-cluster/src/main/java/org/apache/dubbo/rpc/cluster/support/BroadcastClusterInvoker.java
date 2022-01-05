@@ -47,7 +47,7 @@ public class BroadcastClusterInvoker<T> extends AbstractClusterInvoker<T> {
     @SuppressWarnings({"unchecked", "rawtypes"})
     public Result doInvoke(final Invocation invocation, List<Invoker<T>> invokers, LoadBalance loadbalance) throws RpcException {
         checkInvokers(invokers, invocation);
-        RpcContext.getContext().setInvokers((List) invokers);
+        RpcContext.getServiceContext().setInvokers((List) invokers);
         RpcException exception = null;
         Result result = null;
         URL url = getUrl();
@@ -66,26 +66,24 @@ public class BroadcastClusterInvoker<T> extends AbstractClusterInvoker<T> {
         int failIndex = 0;
         for (Invoker<T> invoker : invokers) {
             try {
-                result = invoker.invoke(invocation);
+                result = invokeWithContext(invoker, invocation);
                 if (null != result && result.hasException()) {
                     Throwable resultException = result.getException();
                     if (null != resultException) {
                         exception = getRpcException(result.getException());
                         logger.warn(exception.getMessage(), exception);
+                        failIndex++;
                         if (failIndex == failThresholdIndex) {
                             break;
-                        } else {
-                            failIndex++;
                         }
                     }
                 }
             } catch (Throwable e) {
                 exception = getRpcException(e);
                 logger.warn(exception.getMessage(), exception);
+                failIndex++;
                 if (failIndex == failThresholdIndex) {
                     break;
-                } else {
-                    failIndex++;
                 }
             }
         }
@@ -96,7 +94,7 @@ public class BroadcastClusterInvoker<T> extends AbstractClusterInvoker<T> {
                         String.format("The number of BroadcastCluster call failures has reached the threshold %s", failThresholdIndex));
             } else {
                 logger.debug(String.format("The number of BroadcastCluster call failures has not reached the threshold %s, fail size is %s",
-                        failIndex));
+                        failThresholdIndex, failIndex));
             }
             throw exception;
         }

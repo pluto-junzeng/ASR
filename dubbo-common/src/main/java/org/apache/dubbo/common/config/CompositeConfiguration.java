@@ -18,56 +18,42 @@ package org.apache.dubbo.common.config;
 
 import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
-import org.apache.dubbo.common.utils.StringUtils;
+import org.apache.dubbo.common.utils.ArrayUtils;
 
 import java.util.Arrays;
-import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * This is an abstraction specially customized for the sequence Dubbo retrieves properties.
  */
 public class CompositeConfiguration implements Configuration {
-    private Logger logger = LoggerFactory.getLogger(CompositeConfiguration.class);
-
-    private String id;
-    private String prefix;
+    private final Logger logger = LoggerFactory.getLogger(CompositeConfiguration.class);
 
     /**
      * List holding all the configuration
      */
-    private List<Configuration> configList = new LinkedList<Configuration>();
+    private final List<Configuration> configList = new CopyOnWriteArrayList<>();
 
     //FIXME, consider change configList to SortedMap to replace this boolean status.
     private boolean dynamicIncluded;
 
     public CompositeConfiguration() {
-        this(null, null);
-    }
-
-    public CompositeConfiguration(String prefix, String id) {
-        if (StringUtils.isNotEmpty(prefix) && !prefix.endsWith(".")) {
-            this.prefix = prefix + ".";
-        } else {
-            this.prefix = prefix;
-        }
-        this.id = id;
     }
 
     public CompositeConfiguration(Configuration... configurations) {
-        this();
-        if (configurations != null && configurations.length > 0) {
+        if (ArrayUtils.isNotEmpty(configurations)) {
             Arrays.stream(configurations).filter(config -> !configList.contains(config)).forEach(configList::add);
         }
     }
 
-    public void setDynamicIncluded(boolean dynamicIncluded) {
-        this.dynamicIncluded = dynamicIncluded;
-    }
-
-    //FIXME, consider change configList to SortedMap to replace this boolean status.
+    //FIXME, consider changing configList to SortedMap to replace this boolean status.
     public boolean isDynamicIncluded() {
         return dynamicIncluded;
+    }
+
+    public void setDynamicIncluded(boolean dynamicIncluded) {
+        this.dynamicIncluded = dynamicIncluded;
     }
 
     public void addConfiguration(Configuration configuration) {
@@ -87,42 +73,18 @@ public class CompositeConfiguration implements Configuration {
 
     @Override
     public Object getInternalProperty(String key) {
-        Configuration firstMatchingConfiguration = null;
         for (Configuration config : configList) {
             try {
-                if (config.containsKey(key)) {
-                    firstMatchingConfiguration = config;
-                    break;
+                Object value = config.getProperty(key);
+                if (!ConfigurationUtils.isEmptyValue(value)) {
+                    return value;
                 }
             } catch (Exception e) {
-                logger.error("Error when trying to get value for key " + key + " from " + config + ", will continue to try the next one.");
+                logger.error("Error when trying to get value for key " + key + " from " + config + ", " +
+                    "will continue to try the next one.");
             }
         }
-        if (firstMatchingConfiguration != null) {
-            return firstMatchingConfiguration.getProperty(key);
-        } else {
-            return null;
-        }
+        return null;
     }
 
-    @Override
-    public boolean containsKey(String key) {
-        return configList.stream().anyMatch(c -> c.containsKey(key));
-    }
-
-    @Override
-    public Object getProperty(String key, Object defaultValue) {
-        Object value = null;
-        if (StringUtils.isNotEmpty(prefix)) {
-            if (StringUtils.isNotEmpty(id)) {
-                value = getInternalProperty(prefix + id + "." + key);
-            }
-            if (value == null) {
-                value = getInternalProperty(prefix + key);
-            }
-        } else {
-            value = getInternalProperty(key);
-        }
-        return value != null ? value : defaultValue;
-    }
 }

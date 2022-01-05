@@ -34,7 +34,7 @@ import org.springframework.context.annotation.PropertySource;
 @PropertySource("META-INF/default.properties")
 public class ConsumerConfiguration {
 
-    private static final String remoteURL = "injvm://127.0.0.1?version=2.5.7";
+    private static final String remoteURL = "dubbo://127.0.0.1:12345?version=2.5.7";
 
     /**
      * Current application configuration, to replace XML config:
@@ -67,7 +67,7 @@ public class ConsumerConfiguration {
     }
 
     @Autowired
-    private DemoService autowiredDemoService;
+    private DemoService demoServiceFromAncestor;
 
     @Reference(version = "2.5.7", url = remoteURL)
     private DemoService demoService;

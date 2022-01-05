@@ -17,15 +17,18 @@
 package org.apache.dubbo.remoting.transport.netty4;
 
 import org.apache.dubbo.common.URL;
+import org.apache.dubbo.common.config.ConfigurationUtils;
 import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
+import org.apache.dubbo.common.utils.CollectionUtils;
 import org.apache.dubbo.common.utils.ExecutorUtil;
 import org.apache.dubbo.common.utils.NetUtils;
 import org.apache.dubbo.remoting.Channel;
 import org.apache.dubbo.remoting.ChannelHandler;
 import org.apache.dubbo.remoting.Constants;
 import org.apache.dubbo.remoting.RemotingException;
-import org.apache.dubbo.remoting.RemotingServer;
+import org.apache.dubbo.remoting.api.NettyEventLoopFactory;
+import org.apache.dubbo.remoting.api.SslServerTlsHandler;
 import org.apache.dubbo.remoting.transport.AbstractServer;
 import org.apache.dubbo.remoting.transport.dispatcher.ChannelHandlers;
 import org.apache.dubbo.remoting.utils.UrlUtils;
@@ -38,6 +41,7 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
+import io.netty.util.concurrent.Future;
 
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -48,12 +52,14 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.apache.dubbo.common.constants.CommonConstants.IO_THREADS_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.KEEP_ALIVE_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.SSL_ENABLED_KEY;
+import static org.apache.dubbo.remoting.Constants.EVENT_LOOP_BOSS_POOL_NAME;
+import static org.apache.dubbo.remoting.Constants.EVENT_LOOP_WORKER_POOL_NAME;
 
 
 /**
  * NettyServer.
  */
-public class NettyServer extends AbstractServer implements RemotingServer {
+public class NettyServer extends AbstractServer {
 
     private static final Logger logger = LoggerFactory.getLogger(NettyServer.class);
     /**
@@ -68,15 +74,19 @@ public class NettyServer extends AbstractServer implements RemotingServer {
     /**
      * the boss channel that receive connections and dispatch these to worker channel.
      */
-	private io.netty.channel.Channel channel;
+    private io.netty.channel.Channel channel;
 
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
+    private final int serverShutdownTimeoutMills;
 
     public NettyServer(URL url, ChannelHandler handler) throws RemotingException {
         // you can customize name and type of client thread pool by THREAD_NAME_KEY and THREADPOOL_KEY in CommonConstants.
         // the handler will be wrapped: MultiMessageHandler->HeartbeatHandler->handler
         super(ExecutorUtil.setThreadName(url, SERVER_THREAD_POOL_NAME), ChannelHandlers.wrap(handler, url));
+
+        // read config before destroy
+        serverShutdownTimeoutMills = ConfigurationUtils.getServerShutdownTimeout(getUrl().getOrDefaultModuleModel());
     }
 
     /**
@@ -88,10 +98,10 @@ public class NettyServer extends AbstractServer implements RemotingServer {
     protected void doOpen() throws Throwable {
         bootstrap = new ServerBootstrap();
 
-        bossGroup = NettyEventLoopFactory.eventLoopGroup(1, "NettyServerBoss");
+        bossGroup = NettyEventLoopFactory.eventLoopGroup(1, EVENT_LOOP_BOSS_POOL_NAME);
         workerGroup = NettyEventLoopFactory.eventLoopGroup(
                 getUrl().getPositiveParameter(IO_THREADS_KEY, Constants.DEFAULT_IO_THREADS),
-                "NettyServerWorker");
+            EVENT_LOOP_WORKER_POOL_NAME);
 
         final NettyServerHandler nettyServerHandler = new NettyServerHandler(getUrl(), this);
         channels = nettyServerHandler.getChannels();
@@ -111,8 +121,7 @@ public class NettyServer extends AbstractServer implements RemotingServer {
                         int idleTimeout = UrlUtils.getIdleTimeout(getUrl());
                         NettyCodecAdapter adapter = new NettyCodecAdapter(getCodec(), getUrl(), NettyServer.this);
                         if (getUrl().getParameter(SSL_ENABLED_KEY, false)) {
-                            ch.pipeline().addLast("negotiation",
-                                    SslHandlerInitializer.sslServerHandler(getUrl(), nettyServerHandler));
+                            ch.pipeline().addLast("negotiation", new SslServerTlsHandler(getUrl()));
                         }
                         ch.pipeline()
                                 .addLast("decoder", adapter.getDecoder())
@@ -139,9 +148,9 @@ public class NettyServer extends AbstractServer implements RemotingServer {
             logger.warn(e.getMessage(), e);
         }
         try {
-            Collection<org.apache.dubbo.remoting.Channel> channels = getChannels();
-            if (channels != null && channels.size() > 0) {
-                for (org.apache.dubbo.remoting.Channel channel : channels) {
+            Collection<Channel> channels = getChannels();
+            if (CollectionUtils.isNotEmpty(channels)) {
+                for (Channel channel : channels) {
                     try {
                         channel.close();
                     } catch (Throwable e) {
@@ -154,8 +163,12 @@ public class NettyServer extends AbstractServer implements RemotingServer {
         }
         try {
             if (bootstrap != null) {
-                bossGroup.shutdownGracefully().syncUninterruptibly();
-                workerGroup.shutdownGracefully().syncUninterruptibly();
+                long timeout = serverShutdownTimeoutMills;
+                long quietPeriod = Math.min(2000L, timeout);
+                Future<?> bossGroupShutdownFuture = bossGroup.shutdownGracefully(quietPeriod, timeout, MILLISECONDS);
+                Future<?> workerGroupShutdownFuture = workerGroup.shutdownGracefully(quietPeriod, timeout, MILLISECONDS);
+                bossGroupShutdownFuture.syncUninterruptibly();
+                workerGroupShutdownFuture.syncUninterruptibly();
             }
         } catch (Throwable e) {
             logger.warn(e.getMessage(), e);
@@ -172,15 +185,8 @@ public class NettyServer extends AbstractServer implements RemotingServer {
     @Override
     public Collection<Channel> getChannels() {
         Collection<Channel> chs = new ArrayList<>(this.channels.size());
+        // pick channels from NettyServerHandler ( needless to check connectivity )
         chs.addAll(this.channels.values());
-        // check of connection status is unnecessary since we are using channels in NettyServerHandler
-//        for (Channel channel : this.channels.values()) {
-//            if (channel.isConnected()) {
-//                chs.add(channel);
-//            } else {
-//                channels.remove(NetUtils.toAddressString(channel.getRemoteAddress()));
-//            }
-//        }
         return chs;
     }
 

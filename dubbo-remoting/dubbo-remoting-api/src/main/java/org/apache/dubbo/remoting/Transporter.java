@@ -18,6 +18,7 @@ package org.apache.dubbo.remoting;
 
 import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.extension.Adaptive;
+import org.apache.dubbo.common.extension.ExtensionScope;
 import org.apache.dubbo.common.extension.SPI;
 
 /**
@@ -28,12 +29,12 @@ import org.apache.dubbo.common.extension.SPI;
  *
  * @see org.apache.dubbo.remoting.Transporters
  */
-@SPI("netty")
+@SPI(value = "netty", scope = ExtensionScope.FRAMEWORK)
 public interface Transporter {
 
     /**
      * Bind a server.
-     * 会根据参数，找到并调用真正的执行类
+     *
      * @param url     server url
      * @param handler
      * @return server

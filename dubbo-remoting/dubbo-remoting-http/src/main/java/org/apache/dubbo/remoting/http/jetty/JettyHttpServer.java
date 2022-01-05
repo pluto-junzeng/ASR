@@ -31,12 +31,10 @@ import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
-import org.eclipse.jetty.util.log.Log;
-import org.eclipse.jetty.util.log.StdErrLog;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 
-import static org.apache.dubbo.common.constants.CommonConstants.THREADS_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.DEFAULT_THREADS;
+import static org.apache.dubbo.common.constants.CommonConstants.THREADS_KEY;
 
 public class JettyHttpServer extends AbstractHttpServer {
 
@@ -49,10 +47,9 @@ public class JettyHttpServer extends AbstractHttpServer {
     public JettyHttpServer(URL url, final HttpHandler handler) {
         super(url, handler);
         this.url = url;
-        // TODO we should leave this setting to slf4j
-        // we must disable the debug logging for production use
-        Log.setLog(new StdErrLog());
-        Log.getLog().setDebugEnabled(false);
+
+        // set dubbo's logger
+        System.setProperty("org.eclipse.jetty.util.log.class", JettyLoggerAdapter.class.getName());
 
         DispatcherServlet.addHttpHandler(url.getParameter(Constants.BIND_PORT_KEY, url.getPort()), handler);
 
@@ -89,7 +86,7 @@ public class JettyHttpServer extends AbstractHttpServer {
             server.start();
         } catch (Exception e) {
             throw new IllegalStateException("Failed to start jetty server on " + url.getParameter(Constants.BIND_IP_KEY) + ":" + url.getParameter(Constants.BIND_PORT_KEY) + ", cause: "
-                + e.getMessage(), e);
+                    + e.getMessage(), e);
         }
     }
 

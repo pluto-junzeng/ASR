@@ -20,11 +20,10 @@ package org.apache.dubbo.config.spring.context.properties;
 import org.apache.dubbo.config.ApplicationConfig;
 import org.apache.dubbo.config.ProtocolConfig;
 import org.apache.dubbo.config.RegistryConfig;
-import org.apache.dubbo.rpc.model.ApplicationModel;
+import org.apache.dubbo.config.bootstrap.DubboBootstrap;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,20 +32,17 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
+import static org.springframework.test.annotation.DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD;
+
 @ExtendWith(SpringExtension.class)
 @TestPropertySource(locations = "classpath:/dubbo-binder.properties")
 @ContextConfiguration(classes = DefaultDubboConfigBinder.class)
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
+@DirtiesContext(classMode = AFTER_EACH_TEST_METHOD)
 public class DefaultDubboConfigBinderTest {
 
-    @BeforeEach
-    public void setUp() {
-        ApplicationModel.reset();
-    }
-
-    @AfterEach
-    public void tearDown() {
-        ApplicationModel.reset();
+    @BeforeAll
+    public static void setUp() {
+        DubboBootstrap.reset();
     }
 
     @Autowired

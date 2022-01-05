@@ -21,6 +21,7 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.util.Elements;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
@@ -51,7 +52,7 @@ public interface MethodUtils {
      * @param method the method to check
      * @return whether the given method is setter method
      */
-    public static boolean isSetter(Method method) {
+    static boolean isSetter(Method method) {
         return method.getName().startsWith("set")
                 && !"set".equals(method.getName())
                 && Modifier.isPublic(method.getModifiers())
@@ -66,7 +67,7 @@ public interface MethodUtils {
      * @param method the method to check
      * @return whether the given method is getter method
      */
-    public static boolean isGetter(Method method) {
+    static boolean isGetter(Method method) {
         String name = method.getName();
         return (name.startsWith("get") || name.startsWith("is"))
                 && !"get".equals(name) && !"is".equals(name)
@@ -83,7 +84,7 @@ public interface MethodUtils {
      * @param method the method to check
      * @return whether the given method is meta method
      */
-    public static boolean isMetaMethod(Method method) {
+    static boolean isMetaMethod(Method method) {
         String name = method.getName();
         if (!(name.startsWith("get") || name.startsWith("is"))) {
             return false;
@@ -114,7 +115,7 @@ public interface MethodUtils {
      * @param method the method to check
      * @return whether the given method is deprecated method
      */
-    public static boolean isDeprecated(Method method) {
+    static boolean isDeprecated(Method method) {
         return method.getAnnotation(Deprecated.class) != null;
     }
 
@@ -276,9 +277,18 @@ public interface MethodUtils {
         Method method = findMethod(type, methodName, parameterTypes);
         T value = null;
 
+        if (method == null) {
+            throw new IllegalStateException(String.format("cannot find method %s,class: %s", methodName, type.getName()));
+        }
+
         try {
-            ReflectUtils.makeAccessible(method);
+            final boolean isAccessible = method.isAccessible();
+
+            if (!isAccessible) {
+                method.setAccessible(true);
+            }
             value = (T) method.invoke(object, methodParameters);
+            method.setAccessible(isAccessible);
         } catch (Exception e) {
             throw new IllegalArgumentException(e);
         }
@@ -385,5 +395,36 @@ public interface MethodUtils {
     static Method findOverriddenMethod(Method overrider, Class<?> declaringClass) {
         List<Method> matchedMethods = getAllMethods(declaringClass, method -> overrides(overrider, method));
         return matchedMethods.isEmpty() ? null : matchedMethods.get(0);
+    }
+
+    /**
+     * Extract fieldName from set/get/is method. if it's not a set/get/is method, return empty string.
+     * If method equals get/is/getClass/getObject, also return empty string.
+     *
+     * @param method method
+     * @return fieldName
+     */
+    static String extractFieldName(Method method) {
+        List<String> emptyFieldMethod = Arrays.asList("is", "get", "getObject", "getClass");
+        String methodName = method.getName();
+        String fieldName = "";
+
+        if (emptyFieldMethod.contains(methodName)) {
+            return fieldName;
+        } else if (methodName.startsWith("get")) {
+            fieldName = methodName.substring("get".length());
+        } else if (methodName.startsWith("set")) {
+            fieldName = methodName.substring("set".length());
+        } else if (methodName.startsWith("is")) {
+            fieldName = methodName.substring("is".length());
+        } else {
+            return fieldName;
+        }
+
+        if (StringUtils.isNotEmpty(fieldName)) {
+            fieldName = fieldName.substring(0, 1).toLowerCase() + fieldName.substring(1);
+        }
+
+        return fieldName;
     }
 }

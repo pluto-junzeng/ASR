@@ -50,7 +50,9 @@ public final class ArrayUtils {
     }
 
     public static int indexOf(String[] array, String valueToFind, int startIndex) {
-        if (!isEmpty(array) && valueToFind != null) {
+        if (isEmpty(array) || valueToFind == null) {
+            return -1;
+        } else {
             if (startIndex < 0) {
                 startIndex = 0;
             }
@@ -61,8 +63,8 @@ public final class ArrayUtils {
                 }
             }
 
+            return -1;
         }
-        return -1;
     }
 
     /**

@@ -20,6 +20,9 @@ import org.apache.dubbo.common.extension.ExtensionLoader;
 import org.apache.dubbo.common.status.StatusChecker;
 import org.apache.dubbo.config.ProtocolConfig;
 import org.apache.dubbo.config.ProviderConfig;
+import org.apache.dubbo.config.context.ConfigManager;
+import org.apache.dubbo.rpc.model.ApplicationModel;
+import org.apache.dubbo.rpc.model.ModuleModel;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.actuate.health.AbstractHealthIndicator;
@@ -45,11 +48,17 @@ public class DubboHealthIndicator extends AbstractHealthIndicator {
     @Autowired
     private DubboHealthIndicatorProperties dubboHealthIndicatorProperties;
 
-    @Autowired(required = false)
+    //@Autowired(required = false)
     private Map<String, ProtocolConfig> protocolConfigs = Collections.emptyMap();
 
-    @Autowired(required = false)
+    //@Autowired(required = false)
     private Map<String, ProviderConfig> providerConfigs = Collections.emptyMap();
+
+    @Autowired
+    private ConfigManager configManager;
+
+    @Autowired
+    private ApplicationModel applicationModel;
 
     @Override
     protected void doHealthCheck(Health.Builder builder) throws Exception {
@@ -144,6 +153,10 @@ public class DubboHealthIndicator extends AbstractHealthIndicator {
 
     private Map<String, String> resolveStatusCheckerNamesMapFromProtocolConfigs() {
 
+        if (protocolConfigs.isEmpty()) {
+            protocolConfigs = configManager.getConfigsMap(ProtocolConfig.class);
+        }
+
         Map<String, String> statusCheckerNamesMap = new LinkedHashMap<>();
 
         for (Map.Entry<String, ProtocolConfig> entry : protocolConfigs.entrySet()) {
@@ -169,6 +182,13 @@ public class DubboHealthIndicator extends AbstractHealthIndicator {
     }
 
     private Map<String, String> resolveStatusCheckerNamesMapFromProviderConfig() {
+
+        if (providerConfigs.isEmpty()) {
+            providerConfigs = new LinkedHashMap<>();
+            for (ModuleModel moduleModel : applicationModel.getModuleModels()) {
+                providerConfigs.putAll(moduleModel.getConfigManager().getConfigsMap(ProviderConfig.class));
+            }
+        }
 
         Map<String, String> statusCheckerNamesMap = new LinkedHashMap<>();
 

@@ -26,9 +26,8 @@ import org.apache.dubbo.common.serialize.ObjectOutput;
 import org.apache.dubbo.common.serialize.Serialization;
 import org.apache.dubbo.common.utils.CollectionUtils;
 import org.apache.dubbo.remoting.Constants;
-import org.apache.dubbo.rpc.model.ApplicationModel;
-import org.apache.dubbo.rpc.model.ProviderModel;
-import org.apache.dubbo.rpc.model.ServiceRepository;
+import org.apache.dubbo.rpc.model.FrameworkModel;
+import org.apache.dubbo.rpc.model.FrameworkServiceRepository;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -38,6 +37,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static org.apache.dubbo.common.BaseServiceMetadata.keyWithoutGroup;
 
 public class CodecSupport {
     private static final Logger logger = LoggerFactory.getLogger(CodecSupport.class);
@@ -50,9 +51,10 @@ public class CodecSupport {
     private static final ThreadLocal<byte[]> TL_BUFFER = ThreadLocal.withInitial(() -> new byte[1024]);
 
     static {
-        Set<String> supportedExtensions = ExtensionLoader.getExtensionLoader(Serialization.class).getSupportedExtensions();
+        ExtensionLoader<Serialization> extensionLoader = FrameworkModel.defaultModel().getExtensionLoader(Serialization.class);
+        Set<String> supportedExtensions = extensionLoader.getSupportedExtensions();
         for (String name : supportedExtensions) {
-            Serialization serialization = ExtensionLoader.getExtensionLoader(Serialization.class).getExtension(name);
+            Serialization serialization = extensionLoader.getExtension(name);
             byte idByte = serialization.getContentTypeId();
             if (ID_SERIALIZATION_MAP.containsKey(idByte)) {
                 logger.error("Serialization extension " + serialization.getClass().getName()
@@ -79,7 +81,7 @@ public class CodecSupport {
     }
 
     public static Serialization getSerialization(URL url) {
-        return ExtensionLoader.getExtensionLoader(Serialization.class).getExtension(
+        return url.getOrDefaultFrameworkModel().getExtensionLoader(Serialization.class).getExtension(
                 url.getParameter(Constants.SERIALIZATION_KEY, Constants.DEFAULT_REMOTING_SERIALIZATION));
     }
 
@@ -158,24 +160,25 @@ public class CodecSupport {
         return Arrays.equals(payload, getNullBytesOf(getSerializationById(proto)));
     }
 
-    public static void checkSerialization(String path, String version, Byte id) throws IOException {
-        ServiceRepository repository = ApplicationModel.getServiceRepository();
-        ProviderModel providerModel = repository.lookupExportedServiceWithoutGroup(path + ":" + version);
-        if (providerModel == null) {
-            if (logger.isWarnEnabled()) {
-                logger.warn("Serialization security check is enabled but cannot work as expected because " +
-                        "there's no matched provider model for path " + path + ", version " + version);
-            }
+    public static void checkSerialization(FrameworkServiceRepository serviceRepository, String path, String version, Byte id) throws IOException {
+        List<URL> urls = serviceRepository.lookupRegisteredProviderUrlsWithoutGroup(keyWithoutGroup(path, version));
+        if (CollectionUtils.isEmpty(urls)) {
+            throw new IOException("Service " + path + " with version " + version + " not found, invocation rejected.");
         } else {
-            List<URL> urls = providerModel.getServiceConfig().getExportedUrls();
-            if (CollectionUtils.isNotEmpty(urls)) {
-                URL url = urls.get(0);
+            boolean match = false;
+            for (URL url : urls) {
                 String serializationName = url.getParameter(org.apache.dubbo.remoting.Constants.SERIALIZATION_KEY, Constants.DEFAULT_REMOTING_SERIALIZATION);
                 Byte localId = SERIALIZATIONNAME_ID_MAP.get(serializationName);
-                if (localId != null && !localId.equals(id)) {
-                    throw new IOException("Unexpected serialization id:" + id + " received from network, please check if the peer send the right id.");
+                if (localId != null && localId.equals(id)) {
+                    match = true;
                 }
             }
+            if(!match) {
+                throw new IOException("Unexpected serialization id:" + id + " received from network, please check if the peer send the right id.");
+            }
         }
+
     }
+
+
 }

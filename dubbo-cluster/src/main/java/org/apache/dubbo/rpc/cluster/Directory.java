@@ -18,6 +18,7 @@ package org.apache.dubbo.rpc.cluster;
 
 import org.apache.dubbo.common.Node;
 import org.apache.dubbo.common.URL;
+import org.apache.dubbo.common.utils.CollectionUtils;
 import org.apache.dubbo.rpc.Invocation;
 import org.apache.dubbo.rpc.Invoker;
 import org.apache.dubbo.rpc.RpcException;
@@ -42,17 +43,59 @@ public interface Directory<T> extends Node {
 
     /**
      * list invokers.
+     * filtered by invocation
      *
      * @return invokers
      */
     List<Invoker<T>> list(Invocation invocation) throws RpcException;
 
+    /**
+     * list invokers
+     * include all invokers from registry
+     */
     List<Invoker<T>> getAllInvokers();
 
     URL getConsumerUrl();
 
     boolean isDestroyed();
 
+    default boolean isEmpty() {
+        return CollectionUtils.isEmpty(getAllInvokers());
+    }
+
+    default boolean isServiceDiscovery() {
+        return false;
+    }
+
     void discordAddresses();
 
+    RouterChain<T> getRouterChain();
+
+    /**
+     * invalidate an invoker, add it into reconnect task, remove from list next time
+     * will be recovered by address refresh notification or reconnect success notification
+     *
+     * @param invoker invoker to invalidate
+     */
+    void addInvalidateInvoker(Invoker<T> invoker);
+
+    /**
+     * disable an invoker, remove from list next time
+     * will be removed when invoker is removed by address refresh notification
+     * using in service offline notification
+     *
+     * @param invoker invoker to invalidate
+     */
+    void addDisabledInvoker(Invoker<T> invoker);
+
+    /**
+     * recover a disabled invoker
+     *
+     * @param invoker invoker to invalidate
+     */
+    void recoverDisabledInvoker(Invoker<T> invoker);
+
+    default boolean isNotificationReceived() {
+        return false;
+    }
 }

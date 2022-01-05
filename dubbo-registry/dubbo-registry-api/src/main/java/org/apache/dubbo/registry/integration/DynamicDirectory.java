@@ -17,12 +17,14 @@
 package org.apache.dubbo.registry.integration;
 
 import org.apache.dubbo.common.URL;
-import org.apache.dubbo.common.URLBuilder;
 import org.apache.dubbo.common.Version;
+import org.apache.dubbo.common.config.ConfigurationUtils;
 import org.apache.dubbo.common.extension.ExtensionLoader;
 import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
+import org.apache.dubbo.common.utils.CollectionUtils;
 import org.apache.dubbo.common.utils.NetUtils;
+import org.apache.dubbo.registry.AddressListener;
 import org.apache.dubbo.registry.NotifyListener;
 import org.apache.dubbo.registry.Registry;
 import org.apache.dubbo.registry.client.event.listener.ServiceInstancesChangedListener;
@@ -33,25 +35,21 @@ import org.apache.dubbo.rpc.Protocol;
 import org.apache.dubbo.rpc.RpcException;
 import org.apache.dubbo.rpc.cluster.Cluster;
 import org.apache.dubbo.rpc.cluster.Configurator;
+import org.apache.dubbo.rpc.cluster.Constants;
 import org.apache.dubbo.rpc.cluster.RouterChain;
 import org.apache.dubbo.rpc.cluster.RouterFactory;
 import org.apache.dubbo.rpc.cluster.directory.AbstractDirectory;
+import org.apache.dubbo.rpc.cluster.router.state.BitList;
+import org.apache.dubbo.rpc.model.ModuleModel;
 
-import java.util.Collections;
 import java.util.List;
 
 import static org.apache.dubbo.common.constants.CommonConstants.ANY_VALUE;
-import static org.apache.dubbo.common.constants.CommonConstants.DUBBO;
-import static org.apache.dubbo.common.constants.CommonConstants.GROUP_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.INTERFACE_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.MONITOR_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.PROTOCOL_KEY;
 import static org.apache.dubbo.common.constants.RegistryConstants.CATEGORY_KEY;
 import static org.apache.dubbo.common.constants.RegistryConstants.CONSUMERS_CATEGORY;
-import static org.apache.dubbo.registry.Constants.REGISTER_IP_KEY;
 import static org.apache.dubbo.registry.Constants.REGISTER_KEY;
 import static org.apache.dubbo.registry.Constants.SIMPLIFIED_KEY;
-import static org.apache.dubbo.registry.integration.RegistryProtocol.DEFAULT_REGISTER_CONSUMER_KEYS;
+import static org.apache.dubbo.registry.integration.InterfaceCompatibleRegistryProtocol.DEFAULT_REGISTER_CONSUMER_KEYS;
 import static org.apache.dubbo.remoting.Constants.CHECK_KEY;
 
 
@@ -62,72 +60,93 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
 
     private static final Logger logger = LoggerFactory.getLogger(DynamicDirectory.class);
 
-    protected static final Cluster CLUSTER = ExtensionLoader.getExtensionLoader(Cluster.class).getAdaptiveExtension();
+    protected final Cluster cluster;
 
-    protected static final RouterFactory ROUTER_FACTORY = ExtensionLoader.getExtensionLoader(RouterFactory.class)
-            .getAdaptiveExtension();
+    protected final RouterFactory routerFactory;
 
-    protected final String serviceKey; // Initialization at construction time, assertion not null
-    protected final Class<T> serviceType; // Initialization at construction time, assertion not null
-    protected final URL directoryUrl; // Initialization at construction time, assertion not null, and always assign non null value
+    /**
+     * Initialization at construction time, assertion not null
+     */
+    protected final String serviceKey;
+
+    /**
+     * Initialization at construction time, assertion not null
+     */
+    protected final Class<T> serviceType;
+
+    /**
+     * Initialization at construction time, assertion not null, and always assign non null value
+     */
+    protected final URL directoryUrl;
     protected final boolean multiGroup;
-    protected Protocol protocol; // Initialization at the time of injection, the assertion is not null
-    protected Registry registry; // Initialization at the time of injection, the assertion is not null
+
+    /**
+     * Initialization at the time of injection, the assertion is not null
+     */
+    protected Protocol protocol;
+
+    /**
+     * Initialization at the time of injection, the assertion is not null
+     */
+    protected Registry registry;
     protected volatile boolean forbidden = false;
     protected boolean shouldRegister;
     protected boolean shouldSimplified;
 
-    protected volatile URL overrideDirectoryUrl; // Initialization at construction time, assertion not null, and always assign non null value
-
+    /**
+     * Initialization at construction time, assertion not null, and always assign not null value
+     */
+    protected volatile URL subscribeUrl;
     protected volatile URL registeredConsumerUrl;
 
     /**
+     * The initial value is null and the midway may be assigned to null, please use the local variable reference
      * override rules
      * Priority: override>-D>consumer>provider
      * Rule one: for a certain provider <ip:port,timeout=100>
      * Rule two: for all providers <* ,timeout=5000>
      */
-    protected volatile List<Configurator> configurators; // The initial value is null and the midway may be assigned to null, please use the local variable reference
-
-    protected volatile List<Invoker<T>> invokers;
-    // Set<invokerUrls> cache invokeUrls to invokers mapping.
+    protected volatile List<Configurator> configurators;
 
     protected ServiceInstancesChangedListener serviceListener;
 
+    /**
+     * Should continue route if directory is empty
+     */
+    private final boolean shouldFailFast;
+
     public DynamicDirectory(Class<T> serviceType, URL url) {
         super(url, true);
+
+        ModuleModel moduleModel = url.getOrDefaultModuleModel();
+
+        this.cluster = moduleModel.getExtensionLoader(Cluster.class).getAdaptiveExtension();
+        this.routerFactory = moduleModel.getExtensionLoader(RouterFactory.class).getAdaptiveExtension();
+
         if (serviceType == null) {
             throw new IllegalArgumentException("service type is null.");
         }
 
-        shouldRegister = !ANY_VALUE.equals(url.getServiceInterface()) && url.getParameter(REGISTER_KEY, true);
-        shouldSimplified = url.getParameter(SIMPLIFIED_KEY, false);
         if (url.getServiceKey() == null || url.getServiceKey().length() == 0) {
             throw new IllegalArgumentException("registry serviceKey is null.");
         }
+
+        this.shouldRegister = !ANY_VALUE.equals(url.getServiceInterface()) && url.getParameter(REGISTER_KEY, true);
+        this.shouldSimplified = url.getParameter(SIMPLIFIED_KEY, false);
+
         this.serviceType = serviceType;
         this.serviceKey = super.getConsumerUrl().getServiceKey();
 
-        this.overrideDirectoryUrl = this.directoryUrl = turnRegistryUrlToConsumerUrl(url);
-        String group = directoryUrl.getParameter(GROUP_KEY, "");
+        this.directoryUrl = consumerUrl;
+        String group = directoryUrl.getGroup("");
         this.multiGroup = group != null && (ANY_VALUE.equals(group) || group.contains(","));
+
+        this.shouldFailFast = Boolean.parseBoolean(ConfigurationUtils.getProperty(moduleModel, Constants.SHOULD_FAIL_FAST_KEY, "true"));
     }
 
     @Override
     public void addServiceListener(ServiceInstancesChangedListener instanceListener) {
         this.serviceListener = instanceListener;
-    }
-
-    private URL turnRegistryUrlToConsumerUrl(URL url) {
-        return URLBuilder.from(url)
-                .setHost(queryMap.get(REGISTER_IP_KEY) == null ? url.getHost() : queryMap.get(REGISTER_IP_KEY))
-                .setPort(0)
-                .setProtocol(queryMap.get(PROTOCOL_KEY) == null ? DUBBO : queryMap.get(PROTOCOL_KEY))
-                .setPath(queryMap.get(INTERFACE_KEY))
-                .clearParameters()
-                .addParameters(queryMap)
-                .removeParameter(MONITOR_KEY)
-                .build();
     }
 
     public void setProtocol(Protocol protocol) {
@@ -147,38 +166,37 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
     }
 
     public void subscribe(URL url) {
-        setConsumerUrl(url);
+        setSubscribeUrl(url);
         registry.subscribe(url, this);
     }
 
     public void unSubscribe(URL url) {
-        setConsumerUrl(null);
+        setSubscribeUrl(null);
         registry.unsubscribe(url, this);
     }
 
     @Override
-    public List<Invoker<T>> doList(Invocation invocation) {
-        if (forbidden) {
+    public List<Invoker<T>> doList(BitList<Invoker<T>> invokers, Invocation invocation) {
+        if (forbidden && shouldFailFast) {
             // 1. No service provider 2. Service providers are disabled
             throw new RpcException(RpcException.FORBIDDEN_EXCEPTION, "No provider available from registry " +
-                    getUrl().getAddress() + " for service " + getConsumerUrl().getServiceKey() + " on consumer " +
-                    NetUtils.getLocalHost() + " use dubbo version " + Version.getVersion() +
-                    ", please check status of providers(disabled, not registered or in blacklist).");
+                getUrl().getAddress() + " for service " + getConsumerUrl().getServiceKey() + " on consumer " +
+                NetUtils.getLocalHost() + " use dubbo version " + Version.getVersion() +
+                ", please check status of providers(disabled, not registered or in blacklist).");
         }
 
         if (multiGroup) {
-            return this.invokers == null ? Collections.emptyList() : this.invokers;
+            return this.getInvokers();
         }
 
-        List<Invoker<T>> invokers = null;
         try {
             // Get invokers from cache, only runtime routers will be executed.
-            invokers = routerChain.route(getConsumerUrl(), invocation);
+            List<Invoker<T>> result = routerChain.route(getConsumerUrl(), invokers, invocation);
+            return result == null ? BitList.emptyList() : result;
         } catch (Throwable t) {
             logger.error("Failed to execute router: " + getUrl() + ", cause: " + t.getMessage(), t);
+            return BitList.emptyList();
         }
-
-        return invokers == null ? Collections.emptyList() : invokers;
     }
 
     @Override
@@ -188,34 +206,71 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
 
     @Override
     public List<Invoker<T>> getAllInvokers() {
-        return invokers;
+        return this.getInvokers();
     }
 
+    /**
+     * The currently effective consumer url
+     *
+     * @return URL
+     */
     @Override
     public URL getConsumerUrl() {
-        return this.overrideDirectoryUrl;
+        return this.consumerUrl;
     }
 
+    /**
+     * The original consumer url
+     *
+     * @return URL
+     */
+    public URL getOriginalConsumerUrl() {
+        return this.consumerUrl;
+    }
+
+    /**
+     * The url registered to registry or metadata center
+     *
+     * @return URL
+     */
     public URL getRegisteredConsumerUrl() {
         return registeredConsumerUrl;
+    }
+
+    /**
+     * The url used to subscribe from registry
+     *
+     * @return URL
+     */
+    public URL getSubscribeUrl() {
+        return subscribeUrl;
+    }
+
+    public void setSubscribeUrl(URL subscribeUrl) {
+        this.subscribeUrl = subscribeUrl;
     }
 
     public void setRegisteredConsumerUrl(URL url) {
         if (!shouldSimplified) {
             this.registeredConsumerUrl = url.addParameters(CATEGORY_KEY, CONSUMERS_CATEGORY, CHECK_KEY,
-                    String.valueOf(false));
+                String.valueOf(false));
         } else {
             this.registeredConsumerUrl = URL.valueOf(url, DEFAULT_REGISTER_CONSUMER_KEYS, null).addParameters(
-                    CATEGORY_KEY, CONSUMERS_CATEGORY, CHECK_KEY, String.valueOf(false));
+                CATEGORY_KEY, CONSUMERS_CATEGORY, CHECK_KEY, String.valueOf(false));
         }
     }
 
     public void buildRouterChain(URL url) {
-        this.setRouterChain(RouterChain.buildChain(url));
+        this.setRouterChain(RouterChain.buildChain(getInterface(), url));
     }
 
-    public List<Invoker<T>> getInvokers() {
-        return invokers;
+    @Override
+    public boolean isAvailable() {
+        if (isDestroyed() || this.forbidden) {
+            return false;
+        }
+        return CollectionUtils.isNotEmpty(getValidInvokers())
+            && getValidInvokers().stream().anyMatch(Invoker::isAvailable);
     }
 
     @Override
@@ -230,24 +285,37 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
                 registry.unregister(getRegisteredConsumerUrl());
             }
         } catch (Throwable t) {
-            logger.warn("unexpected error when unregister service " + serviceKey + "from registry" + registry.getUrl(), t);
+            logger.warn("unexpected error when unregister service " + serviceKey + " from registry: " + registry.getUrl(), t);
         }
         // unsubscribe.
         try {
-            if (getConsumerUrl() != null && registry != null && registry.isAvailable()) {
-                registry.unsubscribe(getConsumerUrl(), this);
+            if (getSubscribeUrl() != null && registry != null && registry.isAvailable()) {
+                registry.unsubscribe(getSubscribeUrl(), this);
             }
         } catch (Throwable t) {
-            logger.warn("unexpected error when unsubscribe service " + serviceKey + "from registry" + registry.getUrl(), t);
-        }
-        super.destroy(); // must be executed after unsubscribing
-        try {
-            destroyAllInvokers();
-        } catch (Throwable t) {
-            logger.warn("Failed to destroy service " + serviceKey, t);
+            logger.warn("unexpected error when unsubscribe service " + serviceKey + " from registry: " + registry.getUrl(), t);
         }
 
-        invokersChangedListener = null;
+        ExtensionLoader<AddressListener> addressListenerExtensionLoader = getUrl().getOrDefaultModuleModel().getExtensionLoader(AddressListener.class);
+        List<AddressListener> supportedListeners = addressListenerExtensionLoader.getActivateExtension(getUrl(), (String[]) null);
+        if (supportedListeners != null && !supportedListeners.isEmpty()) {
+            for (AddressListener addressListener : supportedListeners) {
+                addressListener.destroy(getConsumerUrl(), this);
+            }
+        }
+
+        synchronized (this) {
+            try {
+                destroyAllInvokers();
+            } catch (Throwable t) {
+                logger.warn("Failed to destroy service " + serviceKey, t);
+            }
+            routerChain.destroy();
+            invokersChangedListener = null;
+            serviceListener = null;
+
+            super.destroy(); // must be executed after unsubscribing
+        }
     }
 
     @Override
@@ -260,23 +328,27 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
     }
 
     private volatile InvokersChangedListener invokersChangedListener;
-    private volatile boolean addressChanged;
+    private volatile boolean invokersChanged;
 
-    public void setInvokersChangedListener(InvokersChangedListener listener) {
+    public synchronized void setInvokersChangedListener(InvokersChangedListener listener) {
         this.invokersChangedListener = listener;
-        if (addressChanged) {
+        if (invokersChangedListener != null && invokersChanged) {
             invokersChangedListener.onChange();
-            this.addressChanged = false;
         }
     }
 
-    protected void invokersChanged() {
+    protected synchronized void invokersChanged() {
+        refreshInvoker();
+        invokersChanged = true;
         if (invokersChangedListener != null) {
             invokersChangedListener.onChange();
-            this.addressChanged = false;
-        } else {
-            this.addressChanged = true;
+            invokersChanged = false;
         }
+    }
+
+    @Override
+    public boolean isNotificationReceived() {
+        return invokersChanged;
     }
 
     protected abstract void destroyAllInvokers();

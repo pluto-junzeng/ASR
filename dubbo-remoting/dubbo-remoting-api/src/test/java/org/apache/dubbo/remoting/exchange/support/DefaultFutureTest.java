@@ -122,7 +122,7 @@ public class DefaultFutureTest {
     }
     /**
      * for example, it will print like this:
-     *before a future is create , time is : 2021-01-22 10:55:03
+     * before a future is created , time is : 2021-01-22 10:55:03
      * null
      * after a future is timeout , time is : 2021-01-22 10:55:05
      */
@@ -156,6 +156,17 @@ public class DefaultFutureTest {
         DefaultFuture future = DefaultFuture.getFuture(channelId);
         //waiting future should be removed by time out check task
         Assertions.assertNull(future);
+    }
+
+    @Test
+    public void testClose() throws Exception {
+        Channel channel = new MockedChannel();
+        Request request = new Request(123);
+        ExecutorService executor = ExtensionLoader.getExtensionLoader(ExecutorRepository.class)
+            .getDefaultExtension().createExecutorIfAbsent(URL.valueOf("dubbo://127.0.0.1:23456"));
+        DefaultFuture.newFuture(channel, request, 1000, executor);
+        DefaultFuture.closeChannel(channel);
+        Assertions.assertFalse(executor.isTerminated());
     }
 
     /**

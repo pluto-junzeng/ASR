@@ -19,6 +19,7 @@ package org.apache.dubbo.config;
 import org.apache.dubbo.common.constants.RegistryConstants;
 import org.apache.dubbo.common.utils.StringUtils;
 import org.apache.dubbo.config.support.Parameter;
+import org.apache.dubbo.rpc.model.ApplicationModel;
 
 import java.util.Map;
 
@@ -43,7 +44,7 @@ public class MonitorConfig extends AbstractConfig {
     private String address;
 
     /**
-     * The monitor user name
+     * The monitor username
      */
     private String username;
 
@@ -63,15 +64,19 @@ public class MonitorConfig extends AbstractConfig {
      */
     private Map<String, String> parameters;
 
-    /**
-     * If it's default
-     */
-    private Boolean isDefault;
-
     public MonitorConfig() {
     }
 
+    public MonitorConfig(ApplicationModel applicationModel) {
+        super(applicationModel);
+    }
+
     public MonitorConfig(String address) {
+        this.address = address;
+    }
+
+    public MonitorConfig(ApplicationModel applicationModel, String address) {
+        super(applicationModel);
         this.address = address;
     }
 
@@ -135,14 +140,6 @@ public class MonitorConfig extends AbstractConfig {
         this.parameters = parameters;
     }
 
-    public Boolean isDefault() {
-        return isDefault;
-    }
-
-    public void setDefault(Boolean isDefault) {
-        this.isDefault = isDefault;
-    }
-
     public String getInterval() {
         return interval;
     }
@@ -152,7 +149,7 @@ public class MonitorConfig extends AbstractConfig {
     }
 
     @Override
-    @Parameter(excluded = true)
+    @Parameter(excluded = true, attribute = false)
     public boolean isValid() {
         return StringUtils.isNotEmpty(address) || RegistryConstants.REGISTRY_PROTOCOL.equals(protocol);
     }

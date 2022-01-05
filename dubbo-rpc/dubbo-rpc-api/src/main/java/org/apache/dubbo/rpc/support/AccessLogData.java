@@ -23,9 +23,6 @@ import org.apache.dubbo.rpc.RpcContext;
 
 import com.alibaba.fastjson.JSON;
 
-import static org.apache.dubbo.common.constants.CommonConstants.GROUP_KEY;
-import static org.apache.dubbo.common.constants.CommonConstants.VERSION_KEY;
-
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
@@ -66,7 +63,7 @@ public final class AccessLogData {
      * Default constructor.
      */
     private AccessLogData() {
-        RpcContext context = RpcContext.getContext();
+        RpcContext context = RpcContext.getServiceContext();
         data = new HashMap<>();
         setLocalHost(context.getLocalHost());
         setLocalPort(context.getLocalPort());
@@ -196,41 +193,41 @@ public final class AccessLogData {
     public String getLogMessage() {
         StringBuilder sn = new StringBuilder();
 
-        sn.append("[")
+        sn.append('[')
                 .append(MESSAGE_DATE_FORMATTER.format(getInvocationTime()))
                 .append("] ")
                 .append(get(REMOTE_HOST))
-                .append(":")
+                .append(':')
                 .append(get(REMOTE_PORT))
                 .append(" -> ")
                 .append(get(LOCAL_HOST))
-                .append(":")
+                .append(':')
                 .append(get(LOCAL_PORT))
                 .append(" - ");
 
         String group = get(GROUP) != null ? get(GROUP).toString() : "";
         if (StringUtils.isNotEmpty(group)) {
-            sn.append(group).append("/");
+            sn.append(group).append('/');
         }
 
         sn.append(get(SERVICE));
 
         String version = get(VERSION) != null ? get(VERSION).toString() : "";
         if (StringUtils.isNotEmpty(version)) {
-            sn.append(":").append(version);
+            sn.append(':').append(version);
         }
 
-        sn.append(" ");
+        sn.append(' ');
         sn.append(get(METHOD_NAME));
 
-        sn.append("(");
+        sn.append('(');
         Class<?>[] types = get(TYPES) != null ? (Class<?>[]) get(TYPES) : new Class[0];
         boolean first = true;
         for (Class<?> type : types) {
             if (first) {
                 first = false;
             } else {
-                sn.append(",");
+                sn.append(',');
             }
             sn.append(type.getName());
         }
@@ -271,8 +268,8 @@ public final class AccessLogData {
     public void buildAccessLogData(Invoker<?> invoker, Invocation inv) {
         setServiceName(invoker.getInterface().getName());
         setMethodName(inv.getMethodName());
-        setVersion(invoker.getUrl().getParameter(VERSION_KEY));
-        setGroup(invoker.getUrl().getParameter(GROUP_KEY));
+        setVersion(invoker.getUrl().getVersion());
+        setGroup(invoker.getUrl().getGroup());
         setInvocationTime(new Date());
         setTypes(inv.getParameterTypes());
         setArguments(inv.getArguments());

@@ -44,7 +44,7 @@ compiler/.gradle/*
 
 # protobuf
 dubbo-serialization/dubbo-serialization-protobuf/build/*
+dubbo-demo/dubbo-demo-triple/build/*
 
-
-# 工厂路径的忽略
-.factorypath
+# global registry center
+.tmp

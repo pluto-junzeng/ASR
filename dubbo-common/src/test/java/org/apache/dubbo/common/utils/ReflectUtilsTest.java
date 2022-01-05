@@ -43,7 +43,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 public class ReflectUtilsTest {
     @Test
@@ -257,25 +256,27 @@ public class ReflectUtilsTest {
 
     @Test
     public void testGetBeanPropertyFields() throws Exception {
-        EmptyClass emptyClass = new EmptyClass();
-        Map<String, Field> map = ReflectUtils.getBeanPropertyFields(emptyClass.getClass());
+        Map<String, Field> map = ReflectUtils.getBeanPropertyFields(EmptyClass.class);
         assertThat(map.size(), is(2));
         assertThat(map, hasKey("set"));
         assertThat(map, hasKey("property"));
         for (Field f : map.values()) {
-            assertDoesNotThrow(() -> f.get(emptyClass));
+            if (!f.isAccessible()) {
+                fail();
+            }
         }
     }
 
     @Test
     public void testGetBeanPropertyReadMethods() throws Exception {
-        EmptyClass emptyClass = new EmptyClass();
-        Map<String, Method> map = ReflectUtils.getBeanPropertyReadMethods(emptyClass.getClass());
+        Map<String, Method> map = ReflectUtils.getBeanPropertyReadMethods(EmptyClass.class);
         assertThat(map.size(), is(2));
         assertThat(map, hasKey("set"));
         assertThat(map, hasKey("property"));
         for (Method m : map.values()) {
-            assertDoesNotThrow(() -> m.invoke(emptyClass));
+            if (!m.isAccessible()) {
+                fail();
+            }
         }
     }
 
@@ -438,13 +439,6 @@ public class ReflectUtilsTest {
         Assertions.assertEquals("S", types6[1].getTypeName());
     }
 
-    @Test
-    public void testCheckZeroArgConstructor() {
-        assertTrue(ReflectUtils.checkZeroArgConstructor(String.class));
-        assertTrue(ReflectUtils.checkZeroArgConstructor(Bar.class));
-        assertFalse(ReflectUtils.checkZeroArgConstructor(Foo4.class));
-    }
-
     public interface TypeClass<T extends String, S> {
 
         CompletableFuture<String> getFuture();
@@ -546,19 +540,6 @@ public class ReflectUtilsTest {
         @Override
         public Foo1 hello(Foo2 foo2) {
             return null;
-        }
-    }
-
-
-    static class Foo4 {
-        public Foo4(int i) {
-
-        }
-    }
-
-    static class Bar {
-        private Bar() {
-
         }
     }
 

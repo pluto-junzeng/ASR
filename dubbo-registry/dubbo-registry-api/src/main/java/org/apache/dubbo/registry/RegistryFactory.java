@@ -20,12 +20,15 @@ import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.extension.Adaptive;
 import org.apache.dubbo.common.extension.SPI;
 
+import static org.apache.dubbo.common.constants.CommonConstants.PROTOCOL_KEY;
+import static org.apache.dubbo.common.extension.ExtensionScope.APPLICATION;
+
 /**
  * RegistryFactory. (SPI, Singleton, ThreadSafe)
  *
  * @see org.apache.dubbo.registry.support.AbstractRegistryFactory
  */
-@SPI("dubbo")
+@SPI(scope = APPLICATION)
 public interface RegistryFactory {
 
     /**
@@ -38,12 +41,11 @@ public interface RegistryFactory {
      * 4. Support file=registry.cache local disk file cache.<br>
      * 5. Support the timeout=1000 request timeout setting.<br>
      * 6. Support session=60000 session timeout or expiration settings.<br>
-     * note: @Adaptive({"protocol"}) 这个自动注释会自动生成代码实现一些的逻辑，它的value参数会从URL中获取protocol键的值，
-     * 并根据获取的值来调用不同的工厂类。 例如，当url.protocol = redis时， 获得RedisRegistryFactory实现类。<br>
+     *
      * @param url Registry address, is not allowed to be empty
      * @return Registry reference, never return empty value
      */
-    @Adaptive({"protocol"}) 
+    @Adaptive({PROTOCOL_KEY})
     Registry getRegistry(URL url);
 
 }

@@ -19,7 +19,6 @@ package org.apache.dubbo.rpc.filter;
 import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.utils.DubboAppender;
 import org.apache.dubbo.common.utils.LogUtil;
-import org.apache.dubbo.common.utils.ReflectUtils;
 import org.apache.dubbo.rpc.Filter;
 import org.apache.dubbo.rpc.Invocation;
 import org.apache.dubbo.rpc.Invoker;
@@ -64,13 +63,13 @@ public class AccessLogFilterTest {
         Invoker<AccessLogFilterTest> invoker = new MyInvoker<AccessLogFilterTest>(url);
         Invocation invocation = new MockInvocation();
 
-        Field field = AccessLogFilter.class.getDeclaredField("LOG_ENTRIES");
-        ReflectUtils.makeAccessible(field);
-        assertTrue(((Map) field.get(AccessLogFilter.class)).isEmpty());
+        Field field = AccessLogFilter.class.getDeclaredField("logEntries");
+        field.setAccessible(true);
+        assertTrue(((Map) field.get(accessLogFilter)).isEmpty());
 
         accessLogFilter.invoke(invoker, invocation);
 
-        Map<String, Set<AccessLogData>> logs = (Map<String, Set<AccessLogData>>) field.get(AccessLogFilter.class);
+        Map<String, Set<AccessLogData>> logs = (Map<String, Set<AccessLogData>>) field.get(accessLogFilter);
         assertFalse(logs.isEmpty());
         assertFalse(logs.get("true").isEmpty());
         AccessLogData log = logs.get("true").iterator().next();

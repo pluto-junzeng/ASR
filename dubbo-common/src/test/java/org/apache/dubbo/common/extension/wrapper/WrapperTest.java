@@ -19,6 +19,7 @@ package org.apache.dubbo.common.extension.wrapper;
 import org.apache.dubbo.common.extension.ExtensionLoader;
 import org.apache.dubbo.common.extension.wrapper.impl.DemoWrapper;
 import org.apache.dubbo.common.extension.wrapper.impl.DemoWrapper2;
+
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;

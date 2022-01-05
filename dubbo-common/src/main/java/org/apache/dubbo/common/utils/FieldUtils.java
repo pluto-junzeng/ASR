@@ -32,10 +32,10 @@ public interface FieldUtils {
      *
      * @param declaredClass the declared class
      * @param fieldName     the name of {@link Field}
-     * @return if can't be found, return <code>null</code>
+     * @return if field can't be found, return <code>null</code>
      */
     static Field getDeclaredField(Class<?> declaredClass, String fieldName) {
-        Field field = null;
+        Field field;
         try {
             field = declaredClass.getDeclaredField(fieldName);
         } catch (NoSuchFieldException ignored) {
@@ -62,6 +62,11 @@ public interface FieldUtils {
                 break;
             }
         }
+
+        if (field == null) {
+           throw new IllegalStateException(String.format("cannot find field %s,field is null", fieldName));
+        }
+
         return field;
     }
 
@@ -95,13 +100,16 @@ public interface FieldUtils {
      * @return the value of  the specified {@link Field}
      */
     static <T> T getFieldValue(Object object, Field field) {
+        boolean accessible = field.isAccessible();
         Object value = null;
         try {
-            ReflectUtils.makeAccessible(field);
+            if (!accessible) {
+                field.setAccessible(true);
+            }
             value = field.get(object);
         } catch (IllegalAccessException ignored) {
         } finally {
-            ReflectUtils.makeAccessible(field);
+            field.setAccessible(accessible);
         }
         return (T) value;
     }
@@ -127,14 +135,17 @@ public interface FieldUtils {
      * @return the previous value of the specified {@link Field}
      */
     static <T> T setFieldValue(Object object, Field field, T value) {
+        boolean accessible = field.isAccessible();
         Object previousValue = null;
         try {
-            ReflectUtils.makeAccessible(field);
+            if (!accessible) {
+                field.setAccessible(true);
+            }
             previousValue = field.get(object);
             field.set(object, value);
         } catch (IllegalAccessException ignored) {
         } finally {
-            ReflectUtils.makeAccessible(field);
+            field.setAccessible(accessible);
         }
         return (T) previousValue;
     }

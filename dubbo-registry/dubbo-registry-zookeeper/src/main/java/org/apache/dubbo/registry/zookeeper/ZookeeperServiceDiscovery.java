@@ -21,30 +21,31 @@ import org.apache.dubbo.common.function.ThrowableConsumer;
 import org.apache.dubbo.common.function.ThrowableFunction;
 import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
-import org.apache.dubbo.common.utils.DefaultPage;
-import org.apache.dubbo.common.utils.Page;
 import org.apache.dubbo.registry.client.AbstractServiceDiscovery;
 import org.apache.dubbo.registry.client.ServiceDiscovery;
 import org.apache.dubbo.registry.client.ServiceInstance;
+import org.apache.dubbo.registry.client.event.ServiceInstancesChangedEvent;
 import org.apache.dubbo.registry.client.event.listener.ServiceInstancesChangedListener;
+import org.apache.dubbo.rpc.RpcException;
+import org.apache.dubbo.rpc.model.ApplicationModel;
 
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.api.CuratorWatcher;
 import org.apache.zookeeper.KeeperException;
 
-import java.util.Iterator;
 import java.util.LinkedHashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 
 import static org.apache.dubbo.common.function.ThrowableFunction.execute;
 import static org.apache.dubbo.registry.zookeeper.util.CuratorFrameworkParams.ROOT_PATH;
 import static org.apache.dubbo.registry.zookeeper.util.CuratorFrameworkUtils.build;
 import static org.apache.dubbo.registry.zookeeper.util.CuratorFrameworkUtils.buildCuratorFramework;
 import static org.apache.dubbo.registry.zookeeper.util.CuratorFrameworkUtils.buildServiceDiscovery;
+import static org.apache.dubbo.rpc.RpcException.REGISTRY_EXCEPTION;
 
 /**
  * Zookeeper {@link ServiceDiscovery} implementation based on
@@ -53,8 +54,6 @@ import static org.apache.dubbo.registry.zookeeper.util.CuratorFrameworkUtils.bui
 public class ZookeeperServiceDiscovery extends AbstractServiceDiscovery {
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
-
-    private URL registryURL;
 
     private CuratorFramework curatorFramework;
 
@@ -67,42 +66,38 @@ public class ZookeeperServiceDiscovery extends AbstractServiceDiscovery {
      */
     private final Map<String, ZookeeperServiceDiscoveryChangeWatcher> watcherCaches = new ConcurrentHashMap<>();
 
-    @Override
-    public void initialize(URL registryURL) throws Exception {
-        this.registryURL = registryURL;
-        this.curatorFramework = buildCuratorFramework(registryURL);
-        this.rootPath = ROOT_PATH.getParameterValue(registryURL);
-        this.serviceDiscovery = buildServiceDiscovery(curatorFramework, rootPath);
-        this.serviceDiscovery.start();
+    public ZookeeperServiceDiscovery(ApplicationModel applicationModel, URL registryURL) {
+        super(applicationModel, registryURL);
+        try {
+            this.curatorFramework = buildCuratorFramework(registryURL);
+            this.rootPath = ROOT_PATH.getParameterValue(registryURL);
+            this.serviceDiscovery = buildServiceDiscovery(curatorFramework, rootPath);
+            this.serviceDiscovery.start();
+        } catch (Exception e) {
+            throw new IllegalStateException("Create zookeeper service discovery failed.", e);
+        }
     }
 
     @Override
-    public URL getUrl() {
-        return registryURL;
-    }
-
-    public void destroy() throws Exception {
+    public void doDestroy() throws Exception {
         serviceDiscovery.close();
+        curatorFramework.close();
     }
 
     @Override
     public void doRegister(ServiceInstance serviceInstance) {
-        doInServiceRegistry(serviceDiscovery -> {
+        try {
             serviceDiscovery.registerService(build(serviceInstance));
-        });
+        } catch (Exception e) {
+            throw new RpcException(REGISTRY_EXCEPTION, "Failed register instance " + serviceInstance.toString(), e);
+        }
     }
 
     @Override
-    public void doUpdate(ServiceInstance serviceInstance) {
-        doInServiceRegistry(serviceDiscovery -> {
-            serviceDiscovery.updateService(build(serviceInstance));
-        });
-    }
-
-    public void unregister(ServiceInstance serviceInstance) throws RuntimeException {
-        doInServiceRegistry(serviceDiscovery -> {
-            serviceDiscovery.unregisterService(build(serviceInstance));
-        });
+    public void doUnregister(ServiceInstance serviceInstance) throws RuntimeException {
+        if (serviceInstance != null) {
+            doInServiceRegistry(serviceDiscovery -> serviceDiscovery.unregisterService(build(serviceInstance)));
+        }
     }
 
     @Override
@@ -112,65 +107,32 @@ public class ZookeeperServiceDiscovery extends AbstractServiceDiscovery {
 
     @Override
     public List<ServiceInstance> getInstances(String serviceName) throws NullPointerException {
-        return doInServiceDiscovery(s -> build(s.queryForInstances(serviceName)));
-    }
-
-    @Override
-    public Page<ServiceInstance> getInstances(String serviceName, int offset, int pageSize, boolean healthyOnly) {
-        String path = buildServicePath(serviceName);
-
-        return execute(path, p -> {
-
-            List<ServiceInstance> serviceInstances = new LinkedList<>();
-
-            int totalSize = 0;
-            try {
-                List<String> serviceIds = new LinkedList<>(curatorFramework.getChildren().forPath(p));
-
-                totalSize = serviceIds.size();
-
-                Iterator<String> iterator = serviceIds.iterator();
-
-                for (int i = 0; i < offset; i++) {
-                    if (iterator.hasNext()) { // remove the elements from 0 to offset
-                        iterator.next();
-                        iterator.remove();
-                    }
-                }
-
-                for (int i = 0; i < pageSize; i++) {
-                    if (iterator.hasNext()) {
-                        String serviceId = iterator.next();
-                        ServiceInstance serviceInstance = build(serviceDiscovery.queryForInstance(serviceName, serviceId));
-                        serviceInstances.add(serviceInstance);
-                    }
-                }
-            } catch (KeeperException.NoNodeException e) {
-                logger.warn(p + " path not exist.", e);
-            }
-
-            return new DefaultPage<>(offset, pageSize, serviceInstances, totalSize);
-        });
+        return doInServiceDiscovery(s -> build(registryURL, s.queryForInstances(serviceName)));
     }
 
     @Override
     public void addServiceInstancesChangedListener(ServiceInstancesChangedListener listener)
-            throws NullPointerException, IllegalArgumentException {
+        throws NullPointerException, IllegalArgumentException {
+        // check if listener has already been added through another interface/service
+        if (!instanceListeners.add(listener)) {
+            return;
+        }
         listener.getServiceNames().forEach(serviceName -> registerServiceWatcher(serviceName, listener));
     }
 
     @Override
     public void removeServiceInstancesChangedListener(ServiceInstancesChangedListener listener) throws IllegalArgumentException {
         listener.getServiceNames().forEach(serviceName -> {
-            ZookeeperServiceDiscoveryChangeWatcher watcher = watcherCaches.remove(serviceName);
-            watcher.stopWatching();
+            ZookeeperServiceDiscoveryChangeWatcher watcher = watcherCaches.remove(buildServicePath(serviceName));
+            if (watcher != null) {
+                watcher.stopWatching();
+            }
         });
     }
 
+
     private void doInServiceRegistry(ThrowableConsumer<org.apache.curator.x.discovery.ServiceDiscovery> consumer) {
-        ThrowableConsumer.execute(serviceDiscovery, s -> {
-            consumer.accept(s);
-        });
+        ThrowableConsumer.execute(serviceDiscovery, s -> consumer.accept(s));
     }
 
     private <R> R doInServiceDiscovery(ThrowableFunction<org.apache.curator.x.discovery.ServiceDiscovery, R> function) {
@@ -184,25 +146,34 @@ public class ZookeeperServiceDiscovery extends AbstractServiceDiscovery {
         } catch (KeeperException.NodeExistsException e) {
             // ignored
             if (logger.isDebugEnabled()) {
-
                 logger.debug(e);
             }
         } catch (Exception e) {
             throw new IllegalStateException("registerServiceWatcher create path=" + path + " fail.", e);
         }
 
-        CuratorWatcher watcher = watcherCaches.computeIfAbsent(path, key ->
-                new ZookeeperServiceDiscoveryChangeWatcher(this, serviceName, listener));
-        try {
-            curatorFramework.getChildren().usingWatcher(watcher).forPath(path);
-        } catch (KeeperException.NoNodeException e) {
-            // ignored
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage());
+        CountDownLatch latch = new CountDownLatch(1);
+        ZookeeperServiceDiscoveryChangeWatcher watcher = watcherCaches.computeIfAbsent(path, key -> {
+            ZookeeperServiceDiscoveryChangeWatcher tmpWatcher = new ZookeeperServiceDiscoveryChangeWatcher(this, serviceName, path, latch);
+            try {
+                curatorFramework.getChildren().usingWatcher(tmpWatcher).forPath(path);
+            } catch (KeeperException.NoNodeException e) {
+                // ignored
+                if (logger.isErrorEnabled()) {
+                    logger.error(e.getMessage());
+                }
+            } catch (Exception e) {
+                throw new IllegalStateException(e.getMessage(), e);
             }
-        } catch (Exception e) {
-            throw new IllegalStateException(e.getMessage(), e);
-        }
+            return tmpWatcher;
+        });
+        watcher.addListener(listener);
+        listener.onEvent(new ServiceInstancesChangedEvent(serviceName, this.getInstances(serviceName)));
+        latch.countDown();
+    }
+
+    public void reRegisterWatcher(ZookeeperServiceDiscoveryChangeWatcher watcher) throws Exception {
+        curatorFramework.getChildren().usingWatcher(watcher).forPath(watcher.getPath());
     }
 
     private String buildServicePath(String serviceName) {
