@@ -7,6 +7,13 @@ target/
 *.tar
 *.tar.gz
 .flattened-pom.xml
+*.class
+*.bin
+*.xml
+*.txt
+*.html
+*.lock
+*.properties
 
 # eclipse ignore
 .settings/
